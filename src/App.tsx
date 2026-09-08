@@ -639,27 +639,22 @@ export default function App() {
   };
 
   const handleCreateKebugaranSubmission = async (data: Omit<KebugaranSubmission, 'id' | 'createdAt'>) => {
-    // Duplicate rejection: Pegawai tidak boleh mengisi formulir kebugaran pada periode yang sama dua kali
     const cleanNip = data.nip.replace(/[\s.-]/g, '').trim();
     const cleanPeriode = data.periode.trim();
-
-    const isDuplicate = kebugaranSubmissions.some((sub) => {
-      const subNip = sub.nip.replace(/[\s.-]/g, '').trim();
-      return subNip === cleanNip && sub.periode.toLowerCase() === cleanPeriode.toLowerCase();
-    });
-
-    if (isDuplicate) {
-      return {
-        success: false,
-        error: `Data Ditolak: Pegawai dengan NIP ${data.nip} (${data.namaPegawai}) sudah terdaftar mengisi formulir data kebugaran untuk ${data.periode}. Setiap pegawai hanya mengisi 1 kali per periode triwulan.`,
-      };
-    }
 
     try {
       const res = await createKebugaranSubmissionInCloud(data);
       if (res.success && res.submission) {
         const newSub = res.submission;
-        setKebugaranSubmissions((prev) => [newSub, ...prev.filter((s) => s.id !== newSub.id)]);
+        setKebugaranSubmissions((prev) => {
+          const filtered = prev.filter((s) => {
+            const sNip = s.nip.replace(/[\s.-]/g, '').trim();
+            const sameNip = sNip === cleanNip;
+            const samePeriode = s.periode.toLowerCase() === cleanPeriode.toLowerCase();
+            return !(sameNip && samePeriode) && s.id !== newSub.id;
+          });
+          return [newSub, ...filtered];
+        });
 
         try {
           if (typeof BroadcastChannel !== 'undefined') {
@@ -679,7 +674,13 @@ export default function App() {
         id: `kbg-${Date.now()}`,
         createdAt: new Date().toISOString(),
       };
-      setKebugaranSubmissions((prev) => [localSub, ...prev]);
+      setKebugaranSubmissions((prev) => {
+        const filtered = prev.filter((s) => {
+          const sNip = s.nip.replace(/[\s.-]/g, '').trim();
+          return !(sNip === cleanNip && s.periode.toLowerCase() === cleanPeriode.toLowerCase());
+        });
+        return [localSub, ...filtered];
+      });
 
       try {
         if (typeof BroadcastChannel !== 'undefined') {

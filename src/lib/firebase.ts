@@ -610,12 +610,15 @@ export function subscribeToKebugaranSubmissions(
 }
 
 /**
- * Create new Kebugaran Submission in Cloud Firestore with instant return
+ * Create or update (upsert) Kebugaran Submission in Cloud Firestore with instant return
  */
 export async function createKebugaranSubmissionInCloud(
   submissionData: Omit<KebugaranSubmission, 'id' | 'createdAt'>
 ): Promise<{ success: boolean; submission?: KebugaranSubmission; error?: string }> {
   const now = new Date().toISOString();
+  const cleanNip = submissionData.nip.replace(/[\s.-]/g, '').trim();
+  const cleanPeriode = submissionData.periode.trim().toLowerCase();
+
   const tempId = 'keb_' + Date.now();
   const fullSubmission: KebugaranSubmission = {
     id: tempId,
@@ -625,14 +628,33 @@ export async function createKebugaranSubmissionInCloud(
 
   try {
     const colRef = collection(db, KEBUGARAN_COLLECTION);
+    const q = query(colRef, where('nip', '==', submissionData.nip));
+    const querySnapshot = await getDocs(q);
+
+    let existingDocId: string | null = null;
+    querySnapshot.forEach((docSnap) => {
+      const d = docSnap.data();
+      const dNip = (d.nip || '').replace(/[\s.-]/g, '').trim();
+      const dPeriode = (d.periode || '').trim().toLowerCase();
+      if (dNip === cleanNip && dPeriode === cleanPeriode) {
+        existingDocId = docSnap.id;
+      }
+    });
+
     const payload = sanitizeForFirestore({
       ...submissionData,
       createdAt: now,
       serverTimestamp: serverTimestamp(),
     });
 
-    const docAdded = await withTimeout(addDoc(colRef, payload), 1200);
-    fullSubmission.id = docAdded.id;
+    if (existingDocId) {
+      const docRef = doc(db, KEBUGARAN_COLLECTION, existingDocId);
+      await withTimeout(updateDoc(docRef, payload), 1200);
+      fullSubmission.id = existingDocId;
+    } else {
+      const docAdded = await withTimeout(addDoc(colRef, payload), 1200);
+      fullSubmission.id = docAdded.id;
+    }
   } catch (err: any) {
     console.warn('Cloud kebugaran write deferred/timed out, using local instant fallback:', err);
   }
