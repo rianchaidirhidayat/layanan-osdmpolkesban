@@ -388,6 +388,23 @@ export default function App() {
     }
   }, [lastPublishedAt]);
 
+  // Real-time Auto-Publish: any customization or edit instantly syncs to live state and Cloud Firestore
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const updatedMenus = JSON.parse(JSON.stringify(menus));
+      const updatedProfile = JSON.parse(JSON.stringify(profile));
+      const now = new Date().toISOString();
+
+      setLiveMenus(updatedMenus);
+      setLiveProfile(updatedProfile);
+      setLastPublishedAt(now);
+
+      publishLivePortalToCloud(updatedMenus, updatedProfile).catch(console.warn);
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [menus, profile]);
+
   useEffect(() => {
     try {
       localStorage.setItem(LOCAL_STORAGE_LOGS_KEY, JSON.stringify(logs));
