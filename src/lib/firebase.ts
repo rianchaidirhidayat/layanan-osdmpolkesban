@@ -398,6 +398,32 @@ export function subscribeToWfaSubmissions(
         });
 
         onUpdate(list);
+
+        // If cloud collection is smaller than initial submissions, seed initial submissions in background
+        if (snapshot.size < INITIAL_WFA_SUBMISSIONS.length) {
+          (async () => {
+            try {
+              for (const initSub of INITIAL_WFA_SUBMISSIONS) {
+                const cleanNip = initSub.nip ? initSub.nip.replace(/[\s.-]/g, '').trim() : '';
+                const cleanDate = initSub.tanggalWfa ? initSub.tanggalWfa.trim() : '';
+                const exists = list.some((c) => {
+                  const cNip = c.nip ? c.nip.replace(/[\s.-]/g, '').trim() : '';
+                  const cDate = c.tanggalWfa ? c.tanggalWfa.trim() : '';
+                  return cNip === cleanNip && cDate === cleanDate;
+                });
+                if (!exists) {
+                  const payload = sanitizeForFirestore({
+                    ...initSub,
+                    serverTimestamp: serverTimestamp(),
+                  });
+                  await addDoc(colRef, payload);
+                }
+              }
+            } catch (e) {
+              console.warn('Background seeding initial WFA error:', e);
+            }
+          })();
+        }
       },
       (err) => {
         console.warn('Firestore wfa_submissions subscription error:', err);
