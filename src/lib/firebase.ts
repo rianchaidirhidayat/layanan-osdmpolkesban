@@ -398,32 +398,6 @@ export function subscribeToWfaSubmissions(
         });
 
         onUpdate(list);
-
-        // If cloud collection is smaller than initial submissions, seed initial submissions in background
-        if (snapshot.size < INITIAL_WFA_SUBMISSIONS.length) {
-          (async () => {
-            try {
-              for (const initSub of INITIAL_WFA_SUBMISSIONS) {
-                const cleanNip = initSub.nip ? initSub.nip.replace(/[\s.-]/g, '').trim() : '';
-                const cleanDate = initSub.tanggalWfa ? initSub.tanggalWfa.trim() : '';
-                const exists = list.some((c) => {
-                  const cNip = c.nip ? c.nip.replace(/[\s.-]/g, '').trim() : '';
-                  const cDate = c.tanggalWfa ? c.tanggalWfa.trim() : '';
-                  return cNip === cleanNip && cDate === cleanDate;
-                });
-                if (!exists) {
-                  const payload = sanitizeForFirestore({
-                    ...initSub,
-                    serverTimestamp: serverTimestamp(),
-                  });
-                  await addDoc(colRef, payload);
-                }
-              }
-            } catch (e) {
-              console.warn('Background seeding initial WFA error:', e);
-            }
-          })();
-        }
       },
       (err) => {
         console.warn('Firestore wfa_submissions subscription error:', err);
@@ -436,41 +410,16 @@ export function subscribeToWfaSubmissions(
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, ms = 1200): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error('Koneksi database cloud timeout (menggunakan fallback lokal instan)'));
-    }, ms);
-    promise.then(
-      (res) => {
-        clearTimeout(timer);
-        resolve(res);
-      },
-      (err) => {
-        clearTimeout(timer);
-        reject(err);
-      }
-    );
-  });
-}
-
 /**
- * Submit a new WFA Bimbingan application to Cloud Firestore with instant optimistic return
+ * Submit a new WFA Bimbingan application to Cloud Firestore
  */
 export async function createWfaSubmissionInCloud(
   submissionData: Omit<WfaSubmission, 'id' | 'status' | 'createdAt'>
 ): Promise<{ success: boolean; submission?: WfaSubmission; error?: string }> {
-  const now = new Date().toISOString();
-  const tempId = 'wfa_' + Date.now();
-  const fullSubmission: WfaSubmission = {
-    id: tempId,
-    ...submissionData,
-    status: 'Menunggu Validasi',
-    createdAt: now,
-  };
-
   try {
     const colRef = collection(db, WFA_COLLECTION);
+    const now = new Date().toISOString();
+    
     const payload = sanitizeForFirestore({
       ...submissionData,
       status: 'Menunggu Validasi' as WfaValidationStatus,
@@ -478,17 +427,27 @@ export async function createWfaSubmissionInCloud(
       serverTimestamp: serverTimestamp(),
     });
 
-    const docAdded = await withTimeout(addDoc(colRef, payload), 1200);
-    fullSubmission.id = docAdded.id;
-  } catch (err: any) {
-    console.warn('Cloud write deferred/timed out, using local instant success fallback:', err);
-  }
+    const docAdded = await addDoc(colRef, payload);
 
-  return { success: true, submission: fullSubmission };
+    const fullSubmission: WfaSubmission = {
+      id: docAdded.id,
+      ...submissionData,
+      status: 'Menunggu Validasi',
+      createdAt: now,
+    };
+
+    return { success: true, submission: fullSubmission };
+  } catch (err: any) {
+    console.error('Failed to create WFA submission in Cloud Firestore:', err);
+    return {
+      success: false,
+      error: err?.message || 'Gagal menyimpan pengajuan ke database server.',
+    };
+  }
 }
 
 /**
- * Update WFA submission validation status in Cloud Firestore (for Admin / Pengelola) with instant return
+ * Update WFA submission validation status in Cloud Firestore (for Admin / Pengelola)
  */
 export async function updateWfaStatusInCloud(
   submissionId: string,
@@ -514,26 +473,31 @@ export async function updateWfaStatusInCloud(
       updates.validatedBy = null;
     }
 
-    await withTimeout(updateDoc(docRef, sanitizeForFirestore(updates)), 1200);
+    await updateDoc(docRef, sanitizeForFirestore(updates));
+    return { success: true };
   } catch (err: any) {
-    console.warn('Cloud update status deferred/timed out, applied locally:', err);
+    console.error('Failed to update WFA status in Cloud Firestore:', err);
+    return {
+      success: false,
+      error: err?.message || 'Gagal memperbarui status pengajuan.',
+    };
   }
-  return { success: true };
 }
 
 /**
- * Delete WFA submission from Cloud Firestore with instant return
+ * Delete WFA submission from Cloud Firestore
  */
 export async function deleteWfaSubmissionInCloud(
   submissionId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const docRef = doc(db, WFA_COLLECTION, submissionId);
-    await withTimeout(deleteDoc(docRef), 1200);
+    await deleteDoc(docRef);
+    return { success: true };
   } catch (err: any) {
-    console.warn('Cloud delete deferred/timed out:', err);
+    console.error('Failed to delete WFA submission:', err);
+    return { success: false, error: err?.message || 'Gagal menghapus data pengajuan.' };
   }
-  return { success: true };
 }
 
 const KEBUGARAN_COLLECTION = 'kebugaran_submissions';
@@ -550,14 +514,19 @@ export function subscribeToKebugaranSubmissions(
     return onSnapshot(
       colRef,
       (snapshot) => {
-        const cloudList: KebugaranSubmission[] = [];
+        if (snapshot.empty) {
+          onUpdate(INITIAL_KEBUGARAN_SUBMISSIONS);
+          return;
+        }
+
+        const list: KebugaranSubmission[] = [];
         snapshot.forEach((docSnap) => {
           const d = docSnap.data();
           if (d) {
-            cloudList.push({
+            list.push({
               id: docSnap.id,
               tanggalPeriksa: d.tanggalPeriksa || '',
-              periode: d.periode || 'Triwulan III',
+              periode: d.periode || 'Triwulan I',
               nip: d.nip || '',
               namaPegawai: d.namaPegawai || '',
               tanggalLahir: d.tanggalLahir || '',
@@ -579,19 +548,6 @@ export function subscribeToKebugaranSubmissions(
           }
         });
 
-        // Combine INITIAL_KEBUGARAN_SUBMISSIONS with cloudList (deduplicated by NIP or ID)
-        const map = new Map<string, KebugaranSubmission>();
-        INITIAL_KEBUGARAN_SUBMISSIONS.forEach((item) => {
-          const key = item.nip ? item.nip.replace(/[\s.-]/g, '').trim() : item.id;
-          map.set(key, item);
-        });
-        cloudList.forEach((item) => {
-          const key = item.nip ? item.nip.replace(/[\s.-]/g, '').trim() : item.id;
-          map.set(key, item);
-        });
-
-        const list = Array.from(map.values());
-
         // In-memory sorting by createdAt descending
         list.sort((a, b) => {
           const timeA = new Date(a.createdAt || 0).getTime();
@@ -600,72 +556,27 @@ export function subscribeToKebugaranSubmissions(
         });
 
         onUpdate(list);
-
-        // If cloud collection is smaller than initial submissions, seed initial submissions in background
-        if (snapshot.size < INITIAL_KEBUGARAN_SUBMISSIONS.length) {
-          (async () => {
-            try {
-              for (const initSub of INITIAL_KEBUGARAN_SUBMISSIONS) {
-                const cleanNip = initSub.nip ? initSub.nip.replace(/[\s.-]/g, '').trim() : '';
-                const exists = cloudList.some((c) => (c.nip ? c.nip.replace(/[\s.-]/g, '').trim() : '') === cleanNip);
-                if (!exists) {
-                  const payload = sanitizeForFirestore({
-                    ...initSub,
-                    serverTimestamp: serverTimestamp(),
-                  });
-                  await addDoc(colRef, payload);
-                }
-              }
-            } catch (e) {
-              console.warn('Background seeding initial kebugaran error:', e);
-            }
-          })();
-        }
       },
       (err) => {
         console.warn('Firestore kebugaran_submissions subscription error:', err);
         if (onError) onError(err);
-        onUpdate(INITIAL_KEBUGARAN_SUBMISSIONS);
       }
     );
   } catch (e) {
     console.warn('Failed to setup kebugaran_submissions listener:', e);
-    onUpdate(INITIAL_KEBUGARAN_SUBMISSIONS);
     return () => {};
   }
 }
 
 /**
- * Create or update (upsert) Kebugaran Submission in Cloud Firestore with instant return
+ * Create new Kebugaran Submission in Cloud Firestore
  */
 export async function createKebugaranSubmissionInCloud(
   submissionData: Omit<KebugaranSubmission, 'id' | 'createdAt'>
 ): Promise<{ success: boolean; submission?: KebugaranSubmission; error?: string }> {
-  const now = new Date().toISOString();
-  const cleanNip = submissionData.nip.replace(/[\s.-]/g, '').trim();
-  const cleanPeriode = submissionData.periode.trim().toLowerCase();
-
-  const tempId = 'keb_' + Date.now();
-  const fullSubmission: KebugaranSubmission = {
-    id: tempId,
-    ...submissionData,
-    createdAt: now,
-  };
-
   try {
     const colRef = collection(db, KEBUGARAN_COLLECTION);
-    const q = query(colRef, where('nip', '==', submissionData.nip));
-    const querySnapshot = await getDocs(q);
-
-    let existingDocId: string | null = null;
-    querySnapshot.forEach((docSnap) => {
-      const d = docSnap.data();
-      const dNip = (d.nip || '').replace(/[\s.-]/g, '').trim();
-      const dPeriode = (d.periode || '').trim().toLowerCase();
-      if (dNip === cleanNip && dPeriode === cleanPeriode) {
-        existingDocId = docSnap.id;
-      }
-    });
+    const now = new Date().toISOString();
 
     const payload = sanitizeForFirestore({
       ...submissionData,
@@ -673,33 +584,37 @@ export async function createKebugaranSubmissionInCloud(
       serverTimestamp: serverTimestamp(),
     });
 
-    if (existingDocId) {
-      const docRef = doc(db, KEBUGARAN_COLLECTION, existingDocId);
-      await withTimeout(updateDoc(docRef, payload), 1200);
-      fullSubmission.id = existingDocId;
-    } else {
-      const docAdded = await withTimeout(addDoc(colRef, payload), 1200);
-      fullSubmission.id = docAdded.id;
-    }
-  } catch (err: any) {
-    console.warn('Cloud kebugaran write deferred/timed out, using local instant fallback:', err);
-  }
+    const docAdded = await addDoc(colRef, payload);
 
-  return { success: true, submission: fullSubmission };
+    const fullSubmission: KebugaranSubmission = {
+      id: docAdded.id,
+      ...submissionData,
+      createdAt: now,
+    };
+
+    return { success: true, submission: fullSubmission };
+  } catch (err: any) {
+    console.error('Failed to create Kebugaran submission in Cloud Firestore:', err);
+    return {
+      success: false,
+      error: err?.message || 'Gagal menyimpan data kebugaran ke cloud database.',
+    };
+  }
 }
 
 /**
- * Delete Kebugaran submission from Cloud Firestore with instant return
+ * Delete Kebugaran submission from Cloud Firestore
  */
 export async function deleteKebugaranSubmissionInCloud(
   submissionId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const docRef = doc(db, KEBUGARAN_COLLECTION, submissionId);
-    await withTimeout(deleteDoc(docRef), 1200);
+    await deleteDoc(docRef);
+    return { success: true };
   } catch (err: any) {
-    console.warn('Cloud delete kebugaran deferred/timed out:', err);
+    console.error('Failed to delete Kebugaran submission:', err);
+    return { success: false, error: err?.message || 'Gagal menghapus data kebugaran.' };
   }
-  return { success: true };
 }
 
