@@ -524,19 +524,14 @@ export function subscribeToKebugaranSubmissions(
     return onSnapshot(
       colRef,
       (snapshot) => {
-        if (snapshot.empty) {
-          onUpdate(INITIAL_KEBUGARAN_SUBMISSIONS);
-          return;
-        }
-
-        const list: KebugaranSubmission[] = [];
+        const cloudList: KebugaranSubmission[] = [];
         snapshot.forEach((docSnap) => {
           const d = docSnap.data();
           if (d) {
-            list.push({
+            cloudList.push({
               id: docSnap.id,
               tanggalPeriksa: d.tanggalPeriksa || '',
-              periode: d.periode || 'Triwulan I',
+              periode: d.periode || 'Triwulan III',
               nip: d.nip || '',
               namaPegawai: d.namaPegawai || '',
               tanggalLahir: d.tanggalLahir || '',
@@ -558,6 +553,19 @@ export function subscribeToKebugaranSubmissions(
           }
         });
 
+        // Combine INITIAL_KEBUGARAN_SUBMISSIONS with cloudList (deduplicated by NIP or ID)
+        const map = new Map<string, KebugaranSubmission>();
+        INITIAL_KEBUGARAN_SUBMISSIONS.forEach((item) => {
+          const key = item.nip ? item.nip.replace(/[\s.-]/g, '').trim() : item.id;
+          map.set(key, item);
+        });
+        cloudList.forEach((item) => {
+          const key = item.nip ? item.nip.replace(/[\s.-]/g, '').trim() : item.id;
+          map.set(key, item);
+        });
+
+        const list = Array.from(map.values());
+
         // In-memory sorting by createdAt descending
         list.sort((a, b) => {
           const timeA = new Date(a.createdAt || 0).getTime();
@@ -566,14 +574,37 @@ export function subscribeToKebugaranSubmissions(
         });
 
         onUpdate(list);
+
+        // If cloud collection is smaller than initial submissions, seed initial submissions in background
+        if (snapshot.size < INITIAL_KEBUGARAN_SUBMISSIONS.length) {
+          (async () => {
+            try {
+              for (const initSub of INITIAL_KEBUGARAN_SUBMISSIONS) {
+                const cleanNip = initSub.nip ? initSub.nip.replace(/[\s.-]/g, '').trim() : '';
+                const exists = cloudList.some((c) => (c.nip ? c.nip.replace(/[\s.-]/g, '').trim() : '') === cleanNip);
+                if (!exists) {
+                  const payload = sanitizeForFirestore({
+                    ...initSub,
+                    serverTimestamp: serverTimestamp(),
+                  });
+                  await addDoc(colRef, payload);
+                }
+              }
+            } catch (e) {
+              console.warn('Background seeding initial kebugaran error:', e);
+            }
+          })();
+        }
       },
       (err) => {
         console.warn('Firestore kebugaran_submissions subscription error:', err);
         if (onError) onError(err);
+        onUpdate(INITIAL_KEBUGARAN_SUBMISSIONS);
       }
     );
   } catch (e) {
     console.warn('Failed to setup kebugaran_submissions listener:', e);
+    onUpdate(INITIAL_KEBUGARAN_SUBMISSIONS);
     return () => {};
   }
 }
