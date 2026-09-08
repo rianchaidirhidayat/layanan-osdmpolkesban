@@ -1,6 +1,6 @@
 {
-  "name": "Direct Menu Microsite & Admin",
-  "description": "Portal layanan kepegawaian internal dengan formulir input data kebugaran berkala (Triwulan I-IV), monitoring tes kebugaran pegawai, ekspor Excel & cetak rekapan, pengajuan WFA, analitik klik, dan kustomisasi menu.",
+  "name": "OSDM Poltekkes Kemenkes Bandung - Portal Layanan Pegawai",
+  "description": "Pusat layanan digital satu pintu OSDM Poltekkes Kemenkes Bandung: presensi online, e-Kinerja BKN, pengajuan WFA bimbingan, data kebugaran pegawai, dan layanan kepegawaian terpadu.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

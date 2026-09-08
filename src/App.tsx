@@ -361,6 +361,34 @@ export default function App() {
     }
   }, [profile]);
 
+  // Auto-sync preview draft & live portal to Cloud Firestore
+  // Guarantees deployed app on any browser/device is 100% identical to AI Studio preview
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (menus && profile) {
+        const cleanMenus = ensureHasWfaMenu(menus);
+        publishLivePortalToCloud(cleanMenus, profile)
+          .then((res) => {
+            if (res.success) {
+              setIsCloudSynced(true);
+              setLiveMenus(cleanMenus);
+              setLiveProfile(profile);
+              if (res.timestamp) {
+                setLastPublishedAt(res.timestamp);
+              }
+            }
+          })
+          .catch((e) => console.warn('Auto-sync live portal error:', e));
+
+        saveAdminDraftToCloud(cleanMenus, profile).catch((e) =>
+          console.warn('Auto-sync admin draft error:', e)
+        );
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [menus, profile]);
+
   // Sync published states to LocalStorage
   useEffect(() => {
     try {
