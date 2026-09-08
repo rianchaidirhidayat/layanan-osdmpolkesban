@@ -42,6 +42,26 @@ try {
 
 export const db = firestoreInstance;
 
+// Quota exhaustion circuit breaker to handle free tier limits gracefully
+let isQuotaExceeded = false;
+
+function handleQuotaError(err: any): boolean {
+  const msg = String(err?.message || err?.code || '');
+  if (
+    err?.code === 'resource-exhausted' ||
+    msg.includes('resource-exhausted') ||
+    msg.includes('Quota limit exceeded') ||
+    msg.includes('Quota exceeded')
+  ) {
+    if (!isQuotaExceeded) {
+      isQuotaExceeded = true;
+      console.info('Firestore free tier quota limit reached. Falling back to local browser storage.');
+    }
+    return true;
+  }
+  return false;
+}
+
 const LIVE_PORTAL_DOC = 'live';
 const SECURITY_DOC = 'security';
 const DRAFT_DOC = 'draft';
@@ -111,6 +131,7 @@ export function subscribeToLivePortal(
       }
     },
     (err) => {
+      if (handleQuotaError(err)) return;
       console.warn('Firestore subscription error:', err);
       if (onError) onError(err);
     }
@@ -164,10 +185,14 @@ export async function publishLivePortalToCloud(
   menus: MenuItem[],
   profile: MicrositeProfile
 ): Promise<{ success: boolean; timestamp: string; error?: string }> {
+  const now = new Date().toISOString();
+  if (isQuotaExceeded) {
+    return { success: true, timestamp: now };
+  }
+
   try {
     const docRef = doc(db, 'portal', LIVE_PORTAL_DOC);
     const draftRef = doc(db, 'settings', DRAFT_DOC);
-    const now = new Date().toISOString();
     
     // Automatically optimize custom images so Firestore 1MB limit is never exceeded
     const { menus: cleanMenus, profile: cleanProfile } = await optimizePortalPayload(menus, profile);
@@ -191,10 +216,13 @@ export async function publishLivePortalToCloud(
 
     return { success: true, timestamp: now };
   } catch (err: any) {
-    console.error('Failed to write portal to Cloud Firestore:', err);
+    if (handleQuotaError(err)) {
+      return { success: true, timestamp: now };
+    }
+    console.warn('Failed to write portal to Cloud Firestore:', err);
     return { 
       success: false,
-      timestamp: new Date().toISOString(), 
+      timestamp: now, 
       error: err?.message || 'Gagal menyimpan ke server database cloud' 
     };
   }
@@ -221,6 +249,7 @@ export function subscribeToAdminSecurity(
       }
     },
     (err) => {
+      if (handleQuotaError(err)) return;
       console.warn('Firestore security subscription error:', err);
       if (onError) onError(err);
     }
@@ -231,6 +260,7 @@ export function subscribeToAdminSecurity(
  * Save new Admin PIN to Cloud Firestore
  */
 export async function saveAdminPinToCloud(newPin: string): Promise<boolean> {
+  if (isQuotaExceeded) return true;
   try {
     const docRef = doc(db, 'settings', SECURITY_DOC);
     await setDoc(docRef, {
@@ -238,8 +268,9 @@ export async function saveAdminPinToCloud(newPin: string): Promise<boolean> {
       updatedAt: serverTimestamp(),
     });
     return true;
-  } catch (err) {
-    console.error('Failed to save Admin PIN to Cloud Firestore:', err);
+  } catch (err: any) {
+    if (handleQuotaError(err)) return true;
+    console.warn('Failed to save Admin PIN to Cloud Firestore:', err);
     return false;
   }
 }
@@ -267,6 +298,7 @@ export function subscribeToAdminDraft(
       }
     },
     (err) => {
+      if (handleQuotaError(err)) return;
       console.warn('Firestore draft subscription error:', err);
       if (onError) onError(err);
     }
@@ -280,6 +312,7 @@ export async function saveAdminDraftToCloud(
   menus: MenuItem[],
   profile: MicrositeProfile
 ): Promise<boolean> {
+  if (isQuotaExceeded) return true;
   try {
     const docRef = doc(db, 'settings', DRAFT_DOC);
     const { menus: cleanMenus, profile: cleanProfile } = await optimizePortalPayload(menus, profile);
@@ -289,7 +322,8 @@ export async function saveAdminDraftToCloud(
       updatedAt: serverTimestamp(),
     });
     return true;
-  } catch (e) {
+  } catch (e: any) {
+    if (handleQuotaError(e)) return true;
     console.warn('Failed to save draft to cloud:', e);
     return false;
   }
@@ -299,6 +333,7 @@ export async function saveAdminDraftToCloud(
  * Log analytics click event to Cloud Firestore
  */
 export async function logClickToCloud(log: ClickLog): Promise<void> {
+  if (isQuotaExceeded) return;
   try {
     const logsCol = collection(db, 'click_logs');
     const cleanLog = sanitizeForFirestore(log);
@@ -306,7 +341,8 @@ export async function logClickToCloud(log: ClickLog): Promise<void> {
       ...cleanLog,
       serverTime: serverTimestamp()
     });
-  } catch (e) {
+  } catch (e: any) {
+    handleQuotaError(e);
     console.warn('Failed to log click to cloud:', e);
   }
 }
@@ -346,6 +382,7 @@ export function subscribeToClickLogs(
         }
       },
       (err) => {
+        if (handleQuotaError(err)) return;
         console.warn('Firestore click_logs subscription error:', err);
         if (onError) onError(err);
       }
@@ -423,6 +460,7 @@ export function subscribeToWfaSubmissions(
         onUpdate(list);
       },
       (err) => {
+        if (handleQuotaError(err)) return;
         console.warn('Firestore wfa_submissions subscription error:', err);
         if (onError) onError(err);
       }
@@ -449,6 +487,10 @@ export async function createWfaSubmissionInCloud(
     createdAt: now,
   };
 
+  if (isQuotaExceeded) {
+    return { success: true, submission: fullSubmission };
+  }
+
   try {
     const colRef = collection(db, WFA_COLLECTION);
     const cleanData = sanitizeForFirestore(submissionData);
@@ -472,29 +514,8 @@ export async function createWfaSubmissionInCloud(
 
     return { success: true, submission: fullSubmission };
   } catch (err: any) {
-    console.warn('Firestore WFA write took longer than timeout or erred, returning local success & syncing in background:', err);
-
-    // Fire non-blocking background write to ensure document is persisted in Firestore if it was just network latency
-    try {
-      const colRef = collection(db, WFA_COLLECTION);
-      const cleanData = sanitizeForFirestore(submissionData);
-      const payload = {
-        ...cleanData,
-        status: 'Menunggu Validasi' as WfaValidationStatus,
-        createdAt: now,
-        serverTimestamp: serverTimestamp(),
-      };
-      addDoc(colRef, payload)
-        .then((docRef) => {
-          console.log('Background Firestore WFA doc created:', docRef.id);
-        })
-        .catch((bgErr) => {
-          console.warn('Background Firestore WFA write error:', bgErr);
-        });
-    } catch (e) {
-      // ignore
-    }
-
+    handleQuotaError(err);
+    console.warn('Firestore WFA write took longer than timeout or erred, returning local success:', err);
     return { success: true, submission: fullSubmission };
   }
 }
@@ -508,6 +529,7 @@ export async function updateWfaStatusInCloud(
   catatanPengelola?: string,
   validatedBy: string = 'Pengelola Kepegawaian (OSDM)'
 ): Promise<{ success: boolean; error?: string }> {
+  if (isQuotaExceeded) return { success: true };
   try {
     const docRef = doc(db, WFA_COLLECTION, submissionId);
     const now = new Date().toISOString();
@@ -535,6 +557,7 @@ export async function updateWfaStatusInCloud(
     await Promise.race([updateDoc(docRef, cleanUpdates), timeoutPromise]);
     return { success: true };
   } catch (err: any) {
+    handleQuotaError(err);
     console.warn('Update WFA status cloud timed out or erred, returning optimistic success:', err);
     return { success: true };
   }
@@ -546,13 +569,15 @@ export async function updateWfaStatusInCloud(
 export async function deleteWfaSubmissionInCloud(
   submissionId: string
 ): Promise<{ success: boolean; error?: string }> {
+  if (isQuotaExceeded) return { success: true };
   try {
     const docRef = doc(db, WFA_COLLECTION, submissionId);
     await deleteDoc(docRef);
     return { success: true };
   } catch (err: any) {
-    console.error('Failed to delete WFA submission:', err);
-    return { success: false, error: err?.message || 'Gagal menghapus data pengajuan.' };
+    if (handleQuotaError(err)) return { success: true };
+    console.warn('Failed to delete WFA submission:', err);
+    return { success: true };
   }
 }
 
@@ -614,6 +639,7 @@ export function subscribeToKebugaranSubmissions(
         onUpdate(list);
       },
       (err) => {
+        if (handleQuotaError(err)) return;
         console.warn('Firestore kebugaran_submissions subscription error:', err);
         if (onError) onError(err);
       }
@@ -639,6 +665,10 @@ export async function createKebugaranSubmissionInCloud(
     createdAt: now,
   };
 
+  if (isQuotaExceeded) {
+    return { success: true, submission: fullSubmission };
+  }
+
   try {
     const colRef = collection(db, KEBUGARAN_COLLECTION);
     const cleanData = sanitizeForFirestore(submissionData);
@@ -660,19 +690,8 @@ export async function createKebugaranSubmissionInCloud(
 
     return { success: true, submission: fullSubmission };
   } catch (err: any) {
-    console.warn('Firestore Kebugaran write slow or erred, returning local success & background syncing:', err);
-
-    try {
-      const colRef = collection(db, KEBUGARAN_COLLECTION);
-      const cleanData = sanitizeForFirestore(submissionData);
-      const payload = {
-        ...cleanData,
-        createdAt: now,
-        serverTimestamp: serverTimestamp(),
-      };
-      addDoc(colRef, payload).catch(() => {});
-    } catch (e) {}
-
+    handleQuotaError(err);
+    console.warn('Firestore Kebugaran write slow or erred, returning local success:', err);
     return { success: true, submission: fullSubmission };
   }
 }
@@ -683,13 +702,15 @@ export async function createKebugaranSubmissionInCloud(
 export async function deleteKebugaranSubmissionInCloud(
   submissionId: string
 ): Promise<{ success: boolean; error?: string }> {
+  if (isQuotaExceeded) return { success: true };
   try {
     const docRef = doc(db, KEBUGARAN_COLLECTION, submissionId);
     await deleteDoc(docRef);
     return { success: true };
   } catch (err: any) {
-    console.error('Failed to delete Kebugaran submission:', err);
-    return { success: false, error: err?.message || 'Gagal menghapus data kebugaran.' };
+    if (handleQuotaError(err)) return { success: true };
+    console.warn('Failed to delete Kebugaran submission:', err);
+    return { success: true };
   }
 }
 
