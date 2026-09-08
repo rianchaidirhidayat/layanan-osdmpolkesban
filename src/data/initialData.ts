@@ -1,0 +1,470 @@
+import { MenuItem, MicrositeProfile, ClickLog, ThemeConfig } from '../types';
+
+export const THEME_PRESETS: ThemeConfig[] = [
+  {
+    id: 'poltekkes-emerald',
+    name: 'Poltekkes Kemenkes Emerald (Resmi)',
+    bgType: 'mesh',
+    primaryBg: '#042f2e',
+    secondaryBg: '#0f766e',
+    accentColor: '#10b981',
+    textColor: '#ffffff',
+    subtextColor: '#ccfbf1',
+    cardRadius: 'rounded-xl',
+    cardGlassEffect: true,
+    fontFamily: 'sans',
+    layoutStyle: 'stacked',
+  },
+  {
+    id: 'corporate-navy',
+    name: 'Corporate Navy & Blue',
+    bgType: 'gradient',
+    primaryBg: '#0f172a',
+    secondaryBg: '#1e3a8a',
+    accentColor: '#38bdf8',
+    textColor: '#ffffff',
+    subtextColor: '#cbd5e1',
+    cardRadius: 'rounded-xl',
+    cardGlassEffect: true,
+    fontFamily: 'sans',
+    layoutStyle: 'stacked',
+  },
+  {
+    id: 'midnight-emerald',
+    name: 'Midnight Teal & Emerald',
+    bgType: 'mesh',
+    primaryBg: '#090d16',
+    secondaryBg: '#064e3b',
+    accentColor: '#10b981',
+    textColor: '#ffffff',
+    subtextColor: '#94a3b8',
+    cardRadius: 'rounded-2xl',
+    cardGlassEffect: true,
+    fontFamily: 'outfit',
+    layoutStyle: 'stacked',
+  },
+  {
+    id: 'cyber-indigo',
+    name: 'Executive Indigo & Slate',
+    bgType: 'gradient',
+    primaryBg: '#0f172a',
+    secondaryBg: '#4f46e5',
+    accentColor: '#818cf8',
+    textColor: '#ffffff',
+    subtextColor: '#cbd5e1',
+    cardRadius: 'rounded-xl',
+    cardGlassEffect: true,
+    fontFamily: 'sans',
+    layoutStyle: 'stacked',
+  },
+  {
+    id: 'luxe-clean',
+    name: 'Minimal Modern Charcoal',
+    bgType: 'dark-neon',
+    primaryBg: '#0a0a0a',
+    secondaryBg: '#171717',
+    accentColor: '#38bdf8',
+    textColor: '#f8fafc',
+    subtextColor: '#94a3b8',
+    cardRadius: 'rounded-2xl',
+    cardGlassEffect: true,
+    fontFamily: 'sans',
+    layoutStyle: 'stacked',
+  },
+  {
+    id: 'clean-bento',
+    name: 'Enterprise Bento Layout',
+    bgType: 'mesh',
+    primaryBg: '#0f172a',
+    secondaryBg: '#334155',
+    accentColor: '#60a5fa',
+    textColor: '#ffffff',
+    subtextColor: '#94a3b8',
+    cardRadius: 'rounded-xl',
+    cardGlassEffect: true,
+    fontFamily: 'sans',
+    layoutStyle: 'bento',
+  }
+];
+
+export const INITIAL_PROFILE: MicrositeProfile = {
+  name: 'OSDM Poltekkes Kemenkes Bandung',
+  tagline: 'Portal Layanan Kepegawaian & SDM Terpadu',
+  bio: 'Pusat layanan digital satu pintu bagi seluruh dosen, tenaga kependidikan, dan pegawai Poltekkes Kemenkes Bandung: presensi online, e-Kinerja BKN, layanan cuti, kenaikan pangkat, e-slip gaji/remunerasi, dan konsultasi OSDM.',
+  avatarUrl: 'https://poltekkesbandung.ac.id/wp-content/uploads/2026/05/cropped-logo-transparan-2.png',
+  logoShape: 'landscape',
+  logoHeight: 74,
+  logoBackground: 'white',
+  coverUrl: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200&auto=format&fit=crop&q=80',
+  isVerified: true,
+  location: 'Direktorat Poltekkes Kemenkes Bandung • Jl. Pajajaran No. 56 Bandung',
+  openingHours: 'Layanan Sistem Online 24 Jam (Helpdesk: Senin - Jumat 07.30 - 16.00 WIB)',
+  socialLinks: [
+    { id: '1', platform: 'whatsapp', url: 'https://wa.me/6281234567890?text=Halo%20Admin%20OSDM%20Poltekkes%20Bandung,%20mohon%20informasi%20layanan%20kepegawaian', label: 'Helpdesk WhatsApp OSDM', isActive: true },
+    { id: '2', platform: 'email', url: 'mailto:kepegawaian@poltekkesbandung.ac.id', label: 'Email Kepegawaian', isActive: true },
+    { id: '3', platform: 'phone', url: 'tel:+62224231627', label: 'Telepon Kantor (022-4231627)', isActive: true },
+    { id: '4', platform: 'website', url: 'https://www.poltekkesbandung.ac.id', label: 'Portal Utama Poltekkes Bandung', isActive: true },
+    { id: '5', platform: 'maps', url: 'https://maps.google.com/?q=Politeknik+Kesehatan+Kemenkes+Bandung+Jl+Pajajaran+No+56', label: 'Lokasi Kampus Direktorat', isActive: true }
+  ],
+  footerBadgeText: 'Portal Resmi OSDM • Poltekkes Kemenkes Bandung • Kemenkes RI',
+  footerCopyright: '© 2026 OSDM Poltekkes Kemenkes Bandung. Hak Cipta Dilindungi.',
+  tabTitle: 'OSDM Poltekkes Kemenkes Bandung - Portal Layanan Pegawai',
+  faviconUrl: '',
+  theme: THEME_PRESETS[0],
+  osdmContactWa: '08119712525'
+};
+
+export const INITIAL_MENUS: MenuItem[] = [
+  {
+    id: 'menu-wfa-bimbingan',
+    title: '📝 Formulir Pengajuan WFA Bimbingan',
+    subtitle: 'Pengajuan jadwal WFA bimbingan dosen di Kota/Kab. Bandung & pengecekan status validasi OSDM',
+    url: '#wfa-bimbingan',
+    type: 'custom',
+    size: 'featured',
+    bgColor: '#047857',
+    textColor: '#ffffff',
+    borderColor: '#34d399',
+    isGradient: true,
+    gradientTo: '#064e3b',
+    gradientAngle: 135,
+    iconName: 'ClipboardCheck',
+    badgeText: '✨ FORMULIR WFA',
+    badgeBgColor: '#fbbf24',
+    badgeTextColor: '#78350f',
+    isActive: true,
+    order: 1,
+    animation: 'pulse',
+    clickCount: 620,
+    category: 'Kepegawaian & Presensi',
+    openInNewTab: false
+  },
+  {
+    id: 'menu-kebugaran-jasmani',
+    title: '🏃 Formulir Input Data Kebugaran',
+    subtitle: 'Pencatatan data kesehatan & tes kebugaran berkala pegawai (Triwulan I s.d IV)',
+    url: '#input-kebugaran',
+    type: 'custom',
+    size: 'featured',
+    bgColor: '#0284c7',
+    textColor: '#ffffff',
+    borderColor: '#38bdf8',
+    isGradient: true,
+    gradientTo: '#0369a1',
+    gradientAngle: 135,
+    iconName: 'Activity',
+    badgeText: '❤️ TES KEBUGARAN',
+    badgeBgColor: '#e0f2fe',
+    badgeTextColor: '#0369a1',
+    isActive: true,
+    order: 2,
+    animation: 'pulse',
+    clickCount: 450,
+    category: 'Kepegawaian & Presensi',
+    openInNewTab: false,
+    isProtected: false,
+    pinCode: '',
+    pinHint: 'PIN akses formulir input data kebugaran'
+  },
+  {
+    id: 'menu-1',
+    title: '🕒 Presensi & Absensi Online Pegawai',
+    subtitle: 'Presensi harian dosen & tendik, pantau kehadiran, clock-in/out, rekap shift kerja',
+    url: 'https://presensi.kemkes.go.id',
+    type: 'link',
+    size: 'featured',
+    bgColor: '#065f46',
+    textColor: '#ffffff',
+    borderColor: '#10b981',
+    isGradient: true,
+    gradientTo: '#047857',
+    gradientAngle: 135,
+    iconName: 'CalendarCheck',
+    badgeText: '⚡ WAJIB HARIAN',
+    badgeBgColor: '#10b981',
+    badgeTextColor: '#ffffff',
+    isActive: true,
+    order: 2,
+    animation: 'pulse',
+    clickCount: 512,
+    category: 'Kepegawaian & Presensi',
+    openInNewTab: true
+  },
+  {
+    id: 'menu-2',
+    title: '📊 e-Kinerja BKN & SKP Kemenkes',
+    subtitle: 'Pengisian kinerja harian, SKP periodik/tahunan, upload bukti dukung & approval atasan',
+    url: 'https://kinerja.bkn.go.id',
+    type: 'link',
+    size: 'large',
+    bgColor: '#0f766e',
+    textColor: '#ffffff',
+    borderColor: '#14b8a6',
+    isGradient: true,
+    gradientTo: '#115e59',
+    gradientAngle: 90,
+    iconName: 'Activity',
+    badgeText: '📑 Penilaian SKP',
+    badgeBgColor: '#2dd4bf',
+    badgeTextColor: '#042f2e',
+    isActive: true,
+    order: 2,
+    animation: 'none',
+    clickCount: 420,
+    category: 'Kepegawaian & Presensi',
+    openInNewTab: true
+  },
+  {
+    id: 'menu-3',
+    title: '🌴 Pengajuan Cuti Pegawai Online (E-Cuti)',
+    subtitle: 'Cuti tahunan, cuti sakit, cuti bersalin, cuti alasan penting & tracking persetujuan',
+    url: 'https://osdm.poltekkesbandung.ac.id/cuti',
+    type: 'link',
+    size: 'large',
+    bgColor: '#0284c7',
+    textColor: '#ffffff',
+    borderColor: '#38bdf8',
+    isGradient: true,
+    gradientTo: '#0369a1',
+    gradientAngle: 120,
+    iconName: 'ClipboardCheck',
+    badgeText: '📋 E-Approval',
+    badgeBgColor: '#0ea5e9',
+    badgeTextColor: '#ffffff',
+    isActive: true,
+    order: 3,
+    animation: 'none',
+    clickCount: 335,
+    category: 'Layanan Administrasi SDM',
+    openInNewTab: true
+  },
+  {
+    id: 'menu-4',
+    title: '🏛️ SIMPEG Kemenkes RI & SI-ASN BKN',
+    subtitle: 'Pembaruan data mandiri ASN, riwayat kepangkatan, KGB, mutasi, & arsip digital',
+    url: 'https://ropeg.kemkes.go.id',
+    type: 'link',
+    size: 'medium',
+    bgColor: '#1e3a8a',
+    textColor: '#ffffff',
+    borderColor: '#3b82f6',
+    isGradient: true,
+    gradientTo: '#1e40af',
+    gradientAngle: 135,
+    iconName: 'Building2',
+    badgeText: '🔒 Portal Resmi',
+    badgeBgColor: '#3b82f6',
+    badgeTextColor: '#ffffff',
+    isActive: true,
+    order: 4,
+    animation: 'none',
+    clickCount: 290,
+    category: 'Layanan Administrasi SDM',
+    openInNewTab: true
+  },
+  {
+    id: 'menu-5',
+    title: '📄 Slip Gaji, Remunerasi & Tunkin Pegawai',
+    subtitle: 'Unduh rincian e-slip remunerasi, gaji pokok, uang makan, insentif & potongan BPJS',
+    url: 'https://osdm.poltekkesbandung.ac.id/remunerasi',
+    type: 'link',
+    size: 'medium',
+    bgColor: '#15803d',
+    textColor: '#ffffff',
+    borderColor: '#22c55e',
+    isGradient: true,
+    gradientTo: '#166534',
+    gradientAngle: 90,
+    iconName: 'FileSpreadsheet',
+    badgeText: '💵 Akses Privat',
+    badgeBgColor: '#22c55e',
+    badgeTextColor: '#ffffff',
+    isActive: true,
+    order: 5,
+    animation: 'none',
+    clickCount: 260,
+    category: 'Kesejahteraan & Remunerasi',
+    openInNewTab: true,
+    isProtected: true,
+    pinCode: '1234',
+    pinHint: 'PIN Demo bawaan: 1234 (Data Rahasia Penggajian)',
+  },
+  {
+    id: 'menu-6',
+    title: '🎓 Kenaikan Pangkat, Jabfung & Izin Belajar',
+    subtitle: 'Usulan penetapan angka kredit (PAK) dosen/fungsional, KGB & rekomendasi tubel/ibel',
+    url: 'https://osdm.poltekkesbandung.ac.id/karir',
+    type: 'link',
+    size: 'medium',
+    bgColor: '#6d28d9',
+    textColor: '#ffffff',
+    borderColor: '#8b5cf6',
+    isGradient: true,
+    gradientTo: '#5b21b6',
+    gradientAngle: 135,
+    iconName: 'GraduationCap',
+    badgeText: '📚 Dosen & Tendik',
+    badgeBgColor: '#a855f7',
+    badgeTextColor: '#ffffff',
+    isActive: true,
+    order: 6,
+    animation: 'none',
+    clickCount: 198,
+    category: 'Pengembangan Karir & Diklat',
+    openInNewTab: true
+  },
+  {
+    id: 'menu-7',
+    title: '📨 Aplikasi SRIKANDI (Tata Naskah Dinas)',
+    subtitle: 'Persuratan dinas elektronik Kemenkes, disposisi surat tugas, permohonan SK resmi',
+    url: 'https://srikandi.arsip.go.id',
+    type: 'link',
+    size: 'medium',
+    bgColor: '#0369a1',
+    textColor: '#ffffff',
+    borderColor: '#38bdf8',
+    isGradient: true,
+    gradientTo: '#075985',
+    gradientAngle: 45,
+    iconName: 'Mail',
+    badgeText: '✉️ E-Office',
+    badgeBgColor: '#38bdf8',
+    badgeTextColor: '#082f49',
+    isActive: true,
+    order: 7,
+    animation: 'none',
+    clickCount: 172,
+    category: 'Persuratan & Dokumen',
+    openInNewTab: true
+  },
+  {
+    id: 'menu-8',
+    title: '💬 Helpdesk & Konsultasi WhatsApp OSDM',
+    subtitle: 'Konsultasi cepat dengan staf kepegawaian mengenai SK, administrasi, & kendala portal',
+    url: 'https://wa.me/6281234567890?text=Halo%20Helpdesk%20OSDM%20Poltekkes%20Bandung,%20saya%20pegawai%20butuh%20informasi/bantuan',
+    type: 'whatsapp',
+    size: 'large',
+    bgColor: '#0f766e',
+    textColor: '#ffffff',
+    borderColor: '#14b8a6',
+    isGradient: true,
+    gradientTo: '#134e4a',
+    gradientAngle: 90,
+    iconName: 'Headphones',
+    badgeText: '💬 Fast Respon OSDM',
+    badgeBgColor: '#2dd4bf',
+    badgeTextColor: '#042f2e',
+    isActive: true,
+    order: 8,
+    animation: 'glow',
+    clickCount: 215,
+    category: 'Bantuan & Kontak OSDM',
+    openInNewTab: true
+  },
+  {
+    id: 'menu-9',
+    title: '📖 Pedoman, SOP Kepegawaian & Disiplin ASN',
+    subtitle: 'Download kumpulan SOP kepegawaian Poltekkes Bandung, kode etik & aturan disiplin PP 94',
+    url: 'https://www.poltekkesbandung.ac.id',
+    type: 'catalog',
+    size: 'medium',
+    bgColor: '#1e293b',
+    textColor: '#f8fafc',
+    borderColor: '#334155',
+    isGradient: true,
+    gradientTo: '#0f172a',
+    gradientAngle: 45,
+    iconName: 'BookOpen',
+    badgeText: '📑 Dokumen Resmi',
+    badgeBgColor: '#10b981',
+    badgeTextColor: '#ffffff',
+    isActive: true,
+    order: 9,
+    animation: 'none',
+    clickCount: 145,
+    category: 'Persuratan & Dokumen',
+    openInNewTab: true
+  }
+];
+
+export const INITIAL_CLICK_LOGS: ClickLog[] = [
+  {
+    id: 'log-1',
+    menuId: 'menu-1',
+    menuTitle: '🕒 Presensi & Absensi Online Pegawai',
+    category: 'Kepegawaian & Presensi',
+    timestamp: new Date(Date.now() - 1000 * 60 * 3).toISOString(),
+    device: 'Mobile',
+    browser: 'Chrome Mobile',
+    referrer: 'Akses Portal Pegawai'
+  },
+  {
+    id: 'log-2',
+    menuId: 'menu-2',
+    menuTitle: '📊 e-Kinerja BKN & SKP Kemenkes',
+    category: 'Kepegawaian & Presensi',
+    timestamp: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+    device: 'Desktop',
+    browser: 'Chrome 122',
+    referrer: 'Portal OSDM'
+  },
+  {
+    id: 'log-3',
+    menuId: 'menu-3',
+    menuTitle: '🌴 Pengajuan Cuti Pegawai Online (E-Cuti)',
+    category: 'Layanan Administrasi SDM',
+    timestamp: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
+    device: 'Mobile',
+    browser: 'Safari iOS',
+    referrer: 'WhatsApp Pegawai'
+  }
+];
+
+export const CATEGORIES_PRESET = [
+  'Semua',
+  'Kepegawaian & Presensi',
+  'Layanan Administrasi SDM',
+  'Kesejahteraan & Remunerasi',
+  'Pengembangan Karir & Diklat',
+  'Persuratan & Dokumen',
+  'Bantuan & Kontak OSDM'
+];
+
+export const DEFAULT_WFA_MENU: MenuItem = INITIAL_MENUS[0];
+export const DEFAULT_KEBUGARAN_MENU: MenuItem = INITIAL_MENUS[1];
+
+export const ensureHasWfaMenu = (menuList: MenuItem[]): MenuItem[] => {
+  if (!Array.isArray(menuList) || menuList.length === 0) {
+    return INITIAL_MENUS;
+  }
+  let result = [...menuList];
+
+  const hasWfa = result.some(
+    (m) =>
+      m.id === 'menu-wfa-bimbingan' ||
+      m.url === '#wfa-bimbingan' ||
+      m.title?.toLowerCase().includes('wfa bimbingan') ||
+      m.title?.toLowerCase().includes('formulir pengajuan wfa')
+  );
+  if (!hasWfa) {
+    result.unshift(DEFAULT_WFA_MENU);
+  }
+
+  const hasKebugaran = result.some(
+    (m) =>
+      m.id === 'menu-kebugaran-jasmani' ||
+      m.url === '#input-kebugaran' ||
+      m.title?.toLowerCase().includes('kebugaran')
+  );
+  if (!hasKebugaran) {
+    const wfaIdx = result.findIndex((m) => m.id === 'menu-wfa-bimbingan' || m.url === '#wfa-bimbingan');
+    if (wfaIdx !== -1) {
+      result.splice(wfaIdx + 1, 0, DEFAULT_KEBUGARAN_MENU);
+    } else {
+      result.unshift(DEFAULT_KEBUGARAN_MENU);
+    }
+  }
+
+  return result;
+};
+

@@ -1,0 +1,1264 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Navbar } from './components/Navbar';
+import { PublicMicrosite } from './components/PublicMicrosite';
+import { AdminDashboard } from './components/AdminDashboard';
+import { QRCodeModal } from './components/QRCodeModal';
+import { AdminAuthModal } from './components/AdminAuthModal';
+import { MenuItem, MicrositeProfile, ClickLog, WfaSubmission, WfaValidationStatus, KebugaranSubmission } from './types';
+import { INITIAL_MENUS, INITIAL_PROFILE, INITIAL_CLICK_LOGS, ensureHasWfaMenu } from './data/initialData';
+import { INITIAL_WFA_SUBMISSIONS } from './data/employeeDatabase';
+import { INITIAL_KEBUGARAN_SUBMISSIONS } from './data/kebugaranInitialData';
+import { KebugaranModal } from './components/KebugaranModal';
+import { motion, AnimatePresence } from 'motion/react';
+import { CheckCheck, Sparkles, Send, Cloud, CloudCheck, Wifi } from 'lucide-react';
+import { 
+  subscribeToLivePortal, 
+  publishLivePortalToCloud, 
+  logClickToCloud,
+  subscribeToAdminSecurity,
+  saveAdminPinToCloud,
+  subscribeToAdminDraft,
+  saveAdminDraftToCloud,
+  subscribeToClickLogs,
+  subscribeToWfaSubmissions,
+  createWfaSubmissionInCloud,
+  updateWfaStatusInCloud,
+  deleteWfaSubmissionInCloud,
+  subscribeToKebugaranSubmissions,
+  createKebugaranSubmissionInCloud,
+  deleteKebugaranSubmissionInCloud
+} from './lib/firebase';
+
+const LOCAL_STORAGE_MENUS_KEY = 'direct_menu_items_v2';
+const LOCAL_STORAGE_PROFILE_KEY = 'direct_menu_profile_v2';
+const LOCAL_STORAGE_LOGS_KEY = 'direct_menu_logs_v2';
+const LOCAL_STORAGE_ADMIN_PIN_KEY = 'direct_menu_admin_pin_v2';
+const SESSION_ADMIN_AUTH_KEY = 'direct_menu_admin_auth_v2';
+const LOCAL_STORAGE_WFA_SUBMISSIONS_KEY = 'direct_menu_wfa_submissions_v1';
+const LOCAL_STORAGE_KEBUGARAN_SUBMISSIONS_KEY = 'direct_menu_kebugaran_submissions_v1';
+
+// Live published storage keys (what employees see on public page)
+const LOCAL_STORAGE_LIVE_MENUS_KEY = 'direct_menu_live_items_v2';
+const LOCAL_STORAGE_LIVE_PROFILE_KEY = 'direct_menu_live_profile_v2';
+const LOCAL_STORAGE_LAST_PUBLISHED_KEY = 'direct_menu_last_published_v2';
+
+export default function App() {
+  const [isCloudSynced, setIsCloudSynced] = useState(false);
+  const isInitialDraftLoadedFromCloudRef = useRef(false);
+
+  // Load initial draft states (Admin working copy)
+  const [menus, setMenus] = useState<MenuItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_MENUS_KEY);
+      if (saved) return ensureHasWfaMenu(JSON.parse(saved));
+    } catch {
+      // ignore
+    }
+    return ensureHasWfaMenu(INITIAL_MENUS);
+  });
+
+  const [profile, setProfile] = useState<MicrositeProfile>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_PROFILE_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return INITIAL_PROFILE;
+  });
+
+  // Live published state (What regular employees see)
+  const [liveMenus, setLiveMenus] = useState<MenuItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_LIVE_MENUS_KEY);
+      if (saved) return ensureHasWfaMenu(JSON.parse(saved));
+      const draftSaved = localStorage.getItem(LOCAL_STORAGE_MENUS_KEY);
+      if (draftSaved) return ensureHasWfaMenu(JSON.parse(draftSaved));
+    } catch {
+      // ignore
+    }
+    return ensureHasWfaMenu(INITIAL_MENUS);
+  });
+
+  const [liveProfile, setLiveProfile] = useState<MicrositeProfile>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_LIVE_PROFILE_KEY);
+      if (saved) return JSON.parse(saved);
+      const draftSaved = localStorage.getItem(LOCAL_STORAGE_PROFILE_KEY);
+      if (draftSaved) return JSON.parse(draftSaved);
+    } catch {
+      // ignore
+    }
+    return INITIAL_PROFILE;
+  });
+
+  const [lastPublishedAt, setLastPublishedAt] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(LOCAL_STORAGE_LAST_PUBLISHED_KEY);
+    } catch {
+      return null;
+    }
+  });
+
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishSuccessToast, setPublishSuccessToast] = useState(false);
+  const [showPublishSuccessModal, setShowPublishSuccessModal] = useState(false);
+
+  const [publishStatus, setPublishStatus] = useState<{
+    success: boolean;
+    message: string;
+    cloudSynced: boolean;
+  } | null>(null);
+
+  const [logs, setLogs] = useState<ClickLog[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_LOGS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return INITIAL_CLICK_LOGS;
+  });
+
+  const [adminPin, setAdminPin] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_ADMIN_PIN_KEY);
+      if (saved) return saved;
+    } catch {
+      // ignore
+    }
+    return 'admin123';
+  });
+
+  // WFA Bimbingan Submissions state
+  const [wfaSubmissions, setWfaSubmissions] = useState<WfaSubmission[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_WFA_SUBMISSIONS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return INITIAL_WFA_SUBMISSIONS;
+  });
+
+  // Kebugaran Jasmani Submissions state
+  const [kebugaranSubmissions, setKebugaranSubmissions] = useState<KebugaranSubmission[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEBUGARAN_SUBMISSIONS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return INITIAL_KEBUGARAN_SUBMISSIONS;
+  });
+
+  const [isAdminKebugaranModalOpen, setIsAdminKebugaranModalOpen] = useState(false);
+
+  // 1. Real-time Cloud Sync for Live Portal across all devices
+  useEffect(() => {
+    const unsubscribe = subscribeToLivePortal(
+      (cloudData) => {
+        if (cloudData && Array.isArray(cloudData.menus) && cloudData.profile) {
+          const syncedMenus = ensureHasWfaMenu(cloudData.menus);
+          setLiveMenus(syncedMenus);
+          setLiveProfile(cloudData.profile);
+          if (cloudData.lastPublishedAt) {
+            setLastPublishedAt(cloudData.lastPublishedAt);
+          }
+          setIsCloudSynced(true);
+
+          // If cloud data was missing the WFA menu, auto-update the live portal in Cloud Firestore
+          const hadWfa = cloudData.menus.some(
+            (m: MenuItem) =>
+              m.id === 'menu-wfa-bimbingan' ||
+              m.url === '#wfa-bimbingan' ||
+              m.title?.toLowerCase().includes('wfa bimbingan')
+          );
+          if (!hadWfa) {
+            publishLivePortalToCloud(syncedMenus, cloudData.profile).catch(console.warn);
+          }
+
+          // Only seed draft from cloud if the user has NO local draft saved yet
+          const hasLocalDraft = !!localStorage.getItem(LOCAL_STORAGE_MENUS_KEY);
+          if (!isInitialDraftLoadedFromCloudRef.current && !hasLocalDraft) {
+            setMenus(syncedMenus);
+            setProfile(cloudData.profile);
+            isInitialDraftLoadedFromCloudRef.current = true;
+          }
+        }
+      },
+      (err) => {
+        console.warn('Firestore subscription status:', err);
+      },
+      async () => {
+        // Cloud document doesn't exist yet on Firestore!
+        // Automatically seed with current menus and profile so any employee opening the link sees it immediately.
+        try {
+          console.log('Seeding initial portal live data to Cloud Firestore...');
+          await publishLivePortalToCloud(menus, profile);
+          setIsCloudSynced(true);
+        } catch (e) {
+          console.warn('Firestore auto-seed error:', e);
+        }
+      }
+    );
+
+    // Multi-tab instant synchronization in the same browser (0ms latency)
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        channel = new BroadcastChannel('direct_menu_live_sync');
+        channel.onmessage = (event) => {
+          if (event.data?.type === 'PORTAL_LIVE_UPDATE') {
+            const { menus: pubMenus, profile: pubProfile, timestamp } = event.data;
+            if (pubMenus && Array.isArray(pubMenus)) {
+              setLiveMenus(ensureHasWfaMenu(pubMenus));
+            }
+            if (pubProfile) {
+              setLiveProfile(pubProfile);
+            }
+            if (timestamp) {
+              setLastPublishedAt(timestamp);
+            }
+            setIsCloudSynced(true);
+          }
+        };
+      } catch (e) {
+        console.warn('BroadcastChannel error:', e);
+      }
+    }
+
+    // Storage event listener fallback for multi-tab sync
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === LOCAL_STORAGE_LIVE_MENUS_KEY && e.newValue) {
+        try {
+          setLiveMenus(ensureHasWfaMenu(JSON.parse(e.newValue)));
+        } catch {}
+      }
+      if (e.key === LOCAL_STORAGE_LIVE_PROFILE_KEY && e.newValue) {
+        try {
+          setLiveProfile(JSON.parse(e.newValue));
+        } catch {}
+      }
+      if (e.key === LOCAL_STORAGE_LAST_PUBLISHED_KEY && e.newValue) {
+        setLastPublishedAt(e.newValue);
+      }
+      if (e.key === LOCAL_STORAGE_WFA_SUBMISSIONS_KEY && e.newValue) {
+        try {
+          setWfaSubmissions(JSON.parse(e.newValue));
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      unsubscribe();
+      if (channel) {
+        channel.close();
+      }
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+  // 2. Real-time Cloud Sync for Admin PIN across all devices/browsers
+  useEffect(() => {
+    const unsubscribe = subscribeToAdminSecurity((cloudPin) => {
+      if (cloudPin && typeof cloudPin === 'string') {
+        setAdminPin(cloudPin);
+        try {
+          localStorage.setItem(LOCAL_STORAGE_ADMIN_PIN_KEY, cloudPin);
+        } catch {
+          // ignore
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // 3. Real-time Cloud Sync for Admin Draft (work-in-progress)
+  useEffect(() => {
+    const unsubscribe = subscribeToAdminDraft((draftData) => {
+      if (draftData && Array.isArray(draftData.menus) && draftData.profile) {
+        if (!isInitialDraftLoadedFromCloudRef.current) {
+          const syncedDraftMenus = ensureHasWfaMenu(draftData.menus);
+          setMenus(syncedDraftMenus);
+          setProfile(draftData.profile);
+          isInitialDraftLoadedFromCloudRef.current = true;
+
+          const hadWfa = draftData.menus.some(
+            (m: MenuItem) =>
+              m.id === 'menu-wfa-bimbingan' ||
+              m.url === '#wfa-bimbingan' ||
+              m.title?.toLowerCase().includes('wfa bimbingan')
+          );
+          if (!hadWfa) {
+            saveAdminDraftToCloud(syncedDraftMenus, draftData.profile).catch(console.warn);
+          }
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // 4. Real-time Cloud Sync for Click Logs / Analytics
+  useEffect(() => {
+    const unsubscribe = subscribeToClickLogs((cloudLogs) => {
+      if (Array.isArray(cloudLogs) && cloudLogs.length > 0) {
+        setLogs(cloudLogs);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem(SESSION_ADMIN_AUTH_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [currentView, setCurrentView] = useState<'public' | 'admin' | 'split'>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('mode') === 'public') {
+        return 'public';
+      }
+      const isAuth = sessionStorage.getItem(SESSION_ADMIN_AUTH_KEY) === 'true';
+      if (isAuth) return 'admin';
+    } catch {
+      // ignore
+    }
+    return 'public';
+  });
+
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  // Sync draft states to LocalStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_MENUS_KEY, JSON.stringify(menus));
+    } catch {
+      // ignore storage overflow
+    }
+  }, [menus]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(profile));
+    } catch {
+      // ignore
+    }
+  }, [profile]);
+
+  // Sync published states to LocalStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_LIVE_MENUS_KEY, JSON.stringify(liveMenus));
+    } catch {
+      // ignore
+    }
+  }, [liveMenus]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_LIVE_PROFILE_KEY, JSON.stringify(liveProfile));
+    } catch {
+      // ignore
+    }
+  }, [liveProfile]);
+
+  useEffect(() => {
+    try {
+      if (lastPublishedAt) {
+        localStorage.setItem(LOCAL_STORAGE_LAST_PUBLISHED_KEY, lastPublishedAt);
+      }
+    } catch {
+      // ignore
+    }
+  }, [lastPublishedAt]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_LOGS_KEY, JSON.stringify(logs));
+    } catch {
+      // ignore
+    }
+  }, [logs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_ADMIN_PIN_KEY, adminPin);
+    } catch {
+      // ignore
+    }
+  }, [adminPin]);
+
+  // Real-time Cloud Sync for WFA Submissions
+  useEffect(() => {
+    const unsubscribe = subscribeToWfaSubmissions((cloudSubmissions) => {
+      if (Array.isArray(cloudSubmissions)) {
+        setWfaSubmissions(cloudSubmissions);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Multi-tab sync channel for WFA operations
+  useEffect(() => {
+    let wfaChannel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        wfaChannel = new BroadcastChannel('wfa_sync_channel');
+        wfaChannel.onmessage = (event) => {
+          if (event.data?.type === 'WFA_DELETE' && event.data.id) {
+            setWfaSubmissions((prev) => prev.filter((s) => s.id !== event.data.id));
+          } else if (event.data?.type === 'WFA_STATUS_UPDATE' && event.data.id) {
+            setWfaSubmissions((prev) =>
+              prev.map((sub) =>
+                sub.id === event.data.id
+                  ? {
+                      ...sub,
+                      status: event.data.status,
+                      catatanPengelola: event.data.notes !== undefined ? event.data.notes : sub.catatanPengelola,
+                      validatedAt: new Date().toISOString(),
+                      validatedBy: 'Tim OSDM Poltekkes',
+                    }
+                  : sub
+              )
+            );
+          } else if (event.data?.type === 'WFA_NEW' && event.data.submission) {
+            setWfaSubmissions((prev) => [
+              event.data.submission,
+              ...prev.filter((s) => s.id !== event.data.submission.id),
+            ]);
+          }
+        };
+      } catch (err) {
+        console.warn('WFA BroadcastChannel setup error:', err);
+      }
+    }
+
+    return () => {
+      if (wfaChannel) {
+        wfaChannel.close();
+      }
+    };
+  }, []);
+
+  // Sync WFA Submissions to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_WFA_SUBMISSIONS_KEY, JSON.stringify(wfaSubmissions));
+    } catch {
+      // ignore
+    }
+  }, [wfaSubmissions]);
+
+  // Real-time Cloud Sync for Kebugaran Submissions
+  useEffect(() => {
+    const unsubscribe = subscribeToKebugaranSubmissions((cloudSubmissions) => {
+      if (Array.isArray(cloudSubmissions)) {
+        setKebugaranSubmissions(cloudSubmissions);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Multi-tab sync channel for Kebugaran operations
+  useEffect(() => {
+    let kebugaranChannel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        kebugaranChannel = new BroadcastChannel('kebugaran_sync_channel');
+        kebugaranChannel.onmessage = (event) => {
+          if (event.data?.type === 'KEBUGARAN_DELETE' && event.data.id) {
+            setKebugaranSubmissions((prev) => prev.filter((s) => s.id !== event.data.id));
+          } else if (event.data?.type === 'KEBUGARAN_NEW' && event.data.submission) {
+            setKebugaranSubmissions((prev) => [
+              event.data.submission,
+              ...prev.filter((s) => s.id !== event.data.submission.id),
+            ]);
+          }
+        };
+      } catch (err) {
+        console.warn('Kebugaran BroadcastChannel setup error:', err);
+      }
+    }
+
+    return () => {
+      if (kebugaranChannel) {
+        kebugaranChannel.close();
+      }
+    };
+  }, []);
+
+  // Sync Kebugaran Submissions to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEBUGARAN_SUBMISSIONS_KEY, JSON.stringify(kebugaranSubmissions));
+    } catch {
+      // ignore
+    }
+  }, [kebugaranSubmissions]);
+
+  // Ensure WFA & Kebugaran menus exist in menus & liveMenus
+  useEffect(() => {
+    setMenus((prev) => ensureHasWfaMenu(prev));
+    setLiveMenus((prev) => ensureHasWfaMenu(prev));
+  }, []);
+
+  const handleCreateWfaSubmission = async (data: Omit<WfaSubmission, 'id' | 'status' | 'createdAt'>) => {
+    // Duplicate rejection: Pegawai tidak boleh mengajukan WFA pada tanggal yang sama dua kali
+    const cleanNip = data.nip.replace(/[\s.-]/g, '').trim();
+    const cleanDate = data.tanggalWfa.trim();
+
+    const isDuplicate = wfaSubmissions.some((sub) => {
+      const subNip = sub.nip.replace(/[\s.-]/g, '').trim();
+      return subNip === cleanNip && sub.tanggalWfa === cleanDate && sub.status !== 'Ditolak';
+    });
+
+    if (isDuplicate) {
+      return {
+        success: false,
+        error: `Pengajuan ditolak: Pegawai dengan NIP ${data.nip} sudah memiliki jadwal pengajuan WFA pada tanggal ${data.tanggalWfa}. Pegawai tidak diperbolehkan mengajukan WFA pada tanggal yang sama dua kali.`,
+      };
+    }
+
+    try {
+      const res = await createWfaSubmissionInCloud(data);
+      if (res.success && res.submission) {
+        const newSub = res.submission;
+        setWfaSubmissions((prev) => [newSub, ...prev.filter((s) => s.id !== newSub.id)]);
+        
+        try {
+          if (typeof BroadcastChannel !== 'undefined') {
+            const bc = new BroadcastChannel('wfa_sync_channel');
+            bc.postMessage({ type: 'WFA_NEW', submission: newSub });
+            bc.close();
+          }
+        } catch {}
+
+        return { success: true, submission: newSub };
+      }
+      throw new Error(res.error || 'Gagal menyimpan ke server');
+    } catch (err: any) {
+      console.error('Cloud WFA submission failed, saving locally:', err);
+      const localSub: WfaSubmission = {
+        ...data,
+        id: `wfa-${Date.now()}`,
+        status: 'Menunggu Validasi',
+        createdAt: new Date().toISOString(),
+      };
+      setWfaSubmissions((prev) => [localSub, ...prev]);
+
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          const bc = new BroadcastChannel('wfa_sync_channel');
+          bc.postMessage({ type: 'WFA_NEW', submission: localSub });
+          bc.close();
+        }
+      } catch {}
+
+      return { success: true, submission: localSub };
+    }
+  };
+
+  const handleUpdateWfaStatus = async (id: string, status: WfaValidationStatus, notes?: string) => {
+    // 1. Optimistically update local state immediately
+    setWfaSubmissions((prev) =>
+      prev.map((sub) =>
+        sub.id === id
+          ? {
+              ...sub,
+              status,
+              catatanPengelola: notes !== undefined ? notes : sub.catatanPengelola,
+              validatedAt: new Date().toISOString(),
+              validatedBy: 'Tim OSDM Poltekkes',
+            }
+          : sub
+      )
+    );
+
+    // 2. Broadcast immediately across open tabs
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('wfa_sync_channel');
+        bc.postMessage({ type: 'WFA_STATUS_UPDATE', id, status, notes });
+        bc.close();
+      }
+    } catch {}
+
+    // 3. Persist to Cloud Firestore
+    try {
+      await updateWfaStatusInCloud(id, status, notes, 'Tim OSDM Poltekkes');
+      return { success: true };
+    } catch (err: any) {
+      console.error('Cloud WFA update status failed, kept locally:', err);
+      return { success: true };
+    }
+  };
+
+  const handleDeleteWfaSubmission = async (id: string) => {
+    // 1. Optimistically remove from state immediately
+    setWfaSubmissions((prev) => {
+      const filtered = prev.filter((s) => s.id !== id);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_WFA_SUBMISSIONS_KEY, JSON.stringify(filtered));
+      } catch {}
+      return filtered;
+    });
+
+    // 2. Broadcast immediately across open tabs
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('wfa_sync_channel');
+        bc.postMessage({ type: 'WFA_DELETE', id });
+        bc.close();
+      }
+    } catch {}
+
+    // 3. Delete from Cloud Firestore
+    try {
+      await deleteWfaSubmissionInCloud(id);
+      return { success: true };
+    } catch (err: any) {
+      console.error('Cloud WFA delete failed, removed locally:', err);
+      return { success: true };
+    }
+  };
+
+  const handleCreateKebugaranSubmission = async (data: Omit<KebugaranSubmission, 'id' | 'createdAt'>) => {
+    // Duplicate rejection: Pegawai tidak boleh mengisi formulir kebugaran pada periode yang sama dua kali
+    const cleanNip = data.nip.replace(/[\s.-]/g, '').trim();
+    const cleanPeriode = data.periode.trim();
+
+    const isDuplicate = kebugaranSubmissions.some((sub) => {
+      const subNip = sub.nip.replace(/[\s.-]/g, '').trim();
+      return subNip === cleanNip && sub.periode.toLowerCase() === cleanPeriode.toLowerCase();
+    });
+
+    if (isDuplicate) {
+      return {
+        success: false,
+        error: `Data Ditolak: Pegawai dengan NIP ${data.nip} (${data.namaPegawai}) sudah terdaftar mengisi formulir data kebugaran untuk ${data.periode}. Setiap pegawai hanya mengisi 1 kali per periode triwulan.`,
+      };
+    }
+
+    try {
+      const res = await createKebugaranSubmissionInCloud(data);
+      if (res.success && res.submission) {
+        const newSub = res.submission;
+        setKebugaranSubmissions((prev) => [newSub, ...prev.filter((s) => s.id !== newSub.id)]);
+
+        try {
+          if (typeof BroadcastChannel !== 'undefined') {
+            const bc = new BroadcastChannel('kebugaran_sync_channel');
+            bc.postMessage({ type: 'KEBUGARAN_NEW', submission: newSub });
+            bc.close();
+          }
+        } catch {}
+
+        return { success: true, submission: newSub };
+      }
+      throw new Error(res.error || 'Gagal menyimpan ke server');
+    } catch (err: any) {
+      console.error('Cloud Kebugaran submission failed, saving locally:', err);
+      const localSub: KebugaranSubmission = {
+        ...data,
+        id: `kbg-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+      };
+      setKebugaranSubmissions((prev) => [localSub, ...prev]);
+
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          const bc = new BroadcastChannel('kebugaran_sync_channel');
+          bc.postMessage({ type: 'KEBUGARAN_NEW', submission: localSub });
+          bc.close();
+        }
+      } catch {}
+
+      return { success: true, submission: localSub };
+    }
+  };
+
+  const handleDeleteKebugaranSubmission = async (id: string) => {
+    // 1. Optimistic local delete
+    setKebugaranSubmissions((prev) => {
+      const filtered = prev.filter((s) => s.id !== id);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEBUGARAN_SUBMISSIONS_KEY, JSON.stringify(filtered));
+      } catch {}
+      return filtered;
+    });
+
+    // 2. Broadcast to other tabs
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('kebugaran_sync_channel');
+        bc.postMessage({ type: 'KEBUGARAN_DELETE', id });
+        bc.close();
+      }
+    } catch {}
+
+    // 3. Delete from Cloud Firestore
+    try {
+      await deleteKebugaranSubmissionInCloud(id);
+      return { success: true };
+    } catch (err: any) {
+      console.error('Cloud Kebugaran delete failed, removed locally:', err);
+      return { success: true };
+    }
+  };
+
+  // Dynamic Browser Tab Title and Favicon Management
+  useEffect(() => {
+    const activeProf = currentView === 'admin' ? profile : liveProfile;
+    const baseTitle = (activeProf.tabTitle && activeProf.tabTitle.trim())
+      ? activeProf.tabTitle.trim()
+      : (activeProf.name || 'Portal Layanan Pegawai');
+
+    document.title = currentView === 'admin' ? `Admin Panel • ${baseTitle}` : baseTitle;
+
+    // Favicon Link in DOM
+    let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+
+    const customFavicon = activeProf.faviconUrl?.trim();
+    if (customFavicon) {
+      link.href = customFavicon;
+    } else if (activeProf.avatarUrl?.trim()) {
+      link.href = activeProf.avatarUrl.trim();
+    } else {
+      // Default SVG favicon
+      link.href = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏢</text></svg>";
+    }
+  }, [
+    currentView,
+    profile.tabTitle,
+    profile.name,
+    profile.faviconUrl,
+    profile.avatarUrl,
+    liveProfile.tabTitle,
+    liveProfile.name,
+    liveProfile.faviconUrl,
+    liveProfile.avatarUrl
+  ]);
+
+  // Handler for Admin PIN change (syncs to Cloud Firestore & LocalStorage)
+  const handleUpdateAdminPin = async (newPin: string) => {
+    const cleanPin = newPin.trim();
+    setAdminPin(cleanPin);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_ADMIN_PIN_KEY, cleanPin);
+      await saveAdminPinToCloud(cleanPin);
+    } catch (e) {
+      console.warn('Failed to sync PIN to cloud:', e);
+    }
+  };
+
+  // Handle URL parameters or Hash (#admin or ?admin=true) & Keyboard shortcut Alt+A
+  useEffect(() => {
+    const checkAdminTrigger = () => {
+      const hasAdminHash = window.location.hash.toLowerCase().includes('admin');
+      const urlParams = new URLSearchParams(window.location.search);
+      const hasAdminQuery = urlParams.has('admin');
+
+      if (hasAdminHash || hasAdminQuery) {
+        if (!isAdminAuthenticated) {
+          setIsAuthModalOpen(true);
+        } else {
+          setCurrentView('admin');
+        }
+      }
+    };
+
+    checkAdminTrigger();
+    window.addEventListener('hashchange', checkAdminTrigger);
+
+    // Keyboard shortcut listener: Alt + A or Ctrl + Shift + A
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.altKey && (e.key === 'a' || e.key === 'A')) || (e.ctrlKey && e.shiftKey && (e.key === 'a' || e.key === 'A'))) {
+        e.preventDefault();
+        if (isAdminAuthenticated) {
+          setCurrentView((prev) => (prev === 'admin' ? 'public' : 'admin'));
+        } else {
+          setIsAuthModalOpen(true);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('hashchange', checkAdminTrigger);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAdminAuthenticated]);
+
+  // Auth Success Handler
+  const handleAuthSuccess = () => {
+    setIsAdminAuthenticated(true);
+    setIsAuthModalOpen(false);
+    setCurrentView('admin');
+  };
+
+  // Logout Handler
+  const handleAdminLogout = () => {
+    setIsAdminAuthenticated(false);
+    setCurrentView('public');
+    try {
+      sessionStorage.removeItem(SESSION_ADMIN_AUTH_KEY);
+      if (window.location.hash.includes('admin')) {
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  // Function to Publish/Update Live Portal for Employees (Real-time Cloud Sync)
+  const handlePublishLive = async () => {
+    setIsPublishing(true);
+    const updatedMenus = JSON.parse(JSON.stringify(menus));
+    const updatedProfile = JSON.parse(JSON.stringify(profile));
+    const now = new Date().toISOString();
+
+    // 1. Update local state and localStorage immediately
+    setLiveMenus(updatedMenus);
+    setLiveProfile(updatedProfile);
+    setLastPublishedAt(now);
+
+    try {
+      localStorage.setItem(LOCAL_STORAGE_LIVE_MENUS_KEY, JSON.stringify(updatedMenus));
+      localStorage.setItem(LOCAL_STORAGE_LIVE_PROFILE_KEY, JSON.stringify(updatedProfile));
+      localStorage.setItem(LOCAL_STORAGE_LAST_PUBLISHED_KEY, now);
+    } catch {
+      // ignore
+    }
+
+    // 2. Broadcast immediately to any other tabs or windows in the same browser (0ms latency)
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        const bc = new BroadcastChannel('direct_menu_live_sync');
+        bc.postMessage({
+          type: 'PORTAL_LIVE_UPDATE',
+          menus: updatedMenus,
+          profile: updatedProfile,
+          timestamp: now,
+        });
+        bc.close();
+      } catch (e) {
+        console.warn('Broadcast error:', e);
+      }
+    }
+
+    try {
+      // 3. Sync directly to Cloud Firestore so ALL devices and public URLs receive updates immediately
+      const result = await publishLivePortalToCloud(updatedMenus, updatedProfile);
+      setLastPublishedAt(result.timestamp);
+      
+      if (!result.success || result.error) {
+        setIsCloudSynced(false);
+        setPublishStatus({
+          success: false,
+          cloudSynced: false,
+          message: `Perubahan baru tersimpan lokal. Gagal terhubung ke Cloud: ${result.error || 'Koneksi terputus'}`
+        });
+      } else {
+        setIsCloudSynced(true);
+        setPublishStatus({
+          success: true,
+          cloudSynced: true,
+          message: 'Berhasil diposting ke Cloud Firestore! Semua perangkat pegawai & tab browser otomatis diperbarui.'
+        });
+      }
+    } catch (error: any) {
+      console.warn('Cloud publishing failed, fell back to local storage:', error);
+      setIsCloudSynced(false);
+      setPublishStatus({
+        success: false,
+        cloudSynced: false,
+        message: `Tersimpan di browser ini saja. (Cloud error: ${error?.message || 'Gagal menyimpan'})`
+      });
+    } finally {
+      setIsPublishing(false);
+      setPublishSuccessToast(true);
+      setShowPublishSuccessModal(true);
+      setTimeout(() => setPublishSuccessToast(false), 4000);
+    }
+  };
+
+  // Click tracking event dispatcher
+  const handleMenuClick = (clickedMenu: MenuItem) => {
+    // 1. Increment menu click count in both draft and live
+    setMenus((prev) =>
+      prev.map((m) =>
+        m.id === clickedMenu.id ? { ...m, clickCount: (m.clickCount || 0) + 1 } : m
+      )
+    );
+    setLiveMenus((prev) =>
+      prev.map((m) =>
+        m.id === clickedMenu.id ? { ...m, clickCount: (m.clickCount || 0) + 1 } : m
+      )
+    );
+
+    // 2. Detect device type
+    const ua = navigator.userAgent;
+    let device: 'Mobile' | 'Desktop' | 'Tablet' = 'Desktop';
+    if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) {
+      device = 'Tablet';
+    } else if (
+      /Mobile|Android|iP(hone|od)|IEMobile|BlackBerry|Kindle|Silk-Accelerated|(hpw|web)OS|Opera M(obi|ini)/i.test(
+        ua
+      )
+    ) {
+      device = 'Mobile';
+    }
+
+    // 3. Create log
+    const newLog: ClickLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      menuId: clickedMenu.id,
+      menuTitle: clickedMenu.title,
+      category: clickedMenu.category || 'Umum',
+      timestamp: new Date().toISOString(),
+      device,
+      browser: /Chrome/i.test(ua) ? 'Chrome' : /Safari/i.test(ua) ? 'Safari' : 'Browser',
+      referrer: document.referrer ? new URL(document.referrer).hostname : 'Direct / QR',
+    };
+
+    setLogs((prev) => [newLog, ...prev.slice(0, 199)]);
+    // Log to cloud asynchronously
+    logClickToCloud(newLog);
+  };
+
+  // Simulate click for demo
+  const handleSimulateClick = () => {
+    if (menus.length === 0) return;
+    const randomMenu = menus[Math.floor(Math.random() * menus.length)];
+    const devices: Array<'Mobile' | 'Desktop' | 'Tablet'> = ['Mobile', 'Mobile', 'Mobile', 'Desktop', 'Tablet'];
+    const referrers = ['Instagram Bio', 'WhatsApp Share', 'TikTok Profile', 'Google Search', 'Direct QR'];
+    const randomDevice = devices[Math.floor(Math.random() * devices.length)];
+    const randomRef = referrers[Math.floor(Math.random() * referrers.length)];
+
+    setMenus((prev) =>
+      prev.map((m) =>
+        m.id === randomMenu.id ? { ...m, clickCount: (m.clickCount || 0) + 1 } : m
+      )
+    );
+
+    const simulatedLog: ClickLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      menuId: randomMenu.id,
+      menuTitle: randomMenu.title,
+      category: randomMenu.category || 'Umum',
+      timestamp: new Date().toISOString(),
+      device: randomDevice,
+      browser: randomDevice === 'Mobile' ? 'Chrome Mobile' : 'Chrome 122',
+      referrer: randomRef,
+    };
+
+    setLogs((prev) => [simulatedLog, ...prev.slice(0, 199)]);
+  };
+
+  const handleClearLogs = () => {
+    if (window.confirm('Hapus seluruh riwayat log klik analitik?')) {
+      setLogs([]);
+      setMenus((prev) => prev.map((m) => ({ ...m, clickCount: 0 })));
+      setLiveMenus((prev) => prev.map((m) => ({ ...m, clickCount: 0 })));
+    }
+  };
+
+  const totalClicks = menus.reduce((acc, m) => acc + (m.clickCount || 0), 0);
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col selection:bg-indigo-600 selection:text-white font-sans antialiased">
+      {/* Top Navbar: ONLY rendered when Admin is Authenticated */}
+      {isAdminAuthenticated && (
+        <Navbar
+          currentView={currentView}
+          setCurrentView={setCurrentView}
+          onOpenQR={() => setIsQRModalOpen(true)}
+          onLogout={handleAdminLogout}
+          onPublish={handlePublishLive}
+          isPublishing={isPublishing}
+          lastPublishedAt={lastPublishedAt}
+          profile={profile}
+          totalClicks={totalClicks}
+        />
+      )}
+
+      {/* Main View Area */}
+      <main className="flex-1 flex flex-col">
+        {/* PUBLIC MICROSITE VIEW (Employees see the LIVE published version) */}
+        {(!isAdminAuthenticated || currentView === 'public') && (
+          <div className="flex-1 flex flex-col justify-start">
+            {/* Quick Admin Return Bar when viewing public mode as Admin */}
+            {isAdminAuthenticated && (
+              <div className="bg-indigo-900 text-indigo-100 px-4 py-2 border-b border-indigo-700/50 flex items-center justify-between text-xs sticky top-14 z-30 shadow-md">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="font-semibold text-white">Mode Tampilan Resmi Pegawai (Live)</span>
+                  <span className="text-[11px] text-indigo-200 hidden sm:inline">— Ini adalah tampilan yang dilihat oleh seluruh pegawai</span>
+                </div>
+                <button
+                  onClick={() => setCurrentView('admin')}
+                  className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded text-xs font-bold transition-colors flex items-center gap-1.5 border border-white/20"
+                >
+                  <span>⚙️ Kembali ke Dashboard</span>
+                </button>
+              </div>
+            )}
+            <PublicMicrosite
+              profile={liveProfile}
+              menus={liveMenus}
+              onMenuClick={handleMenuClick}
+              onOpenQR={() => setIsQRModalOpen(true)}
+              onOpenAdmin={() => {
+                if (isAdminAuthenticated) {
+                  setCurrentView('admin');
+                } else {
+                  setIsAuthModalOpen(true);
+                }
+              }}
+              isStandalone={true}
+              lastPublishedAt={lastPublishedAt}
+              wfaSubmissions={wfaSubmissions}
+              onSubmitWfa={handleCreateWfaSubmission}
+              kebugaranSubmissions={kebugaranSubmissions}
+              onSubmitKebugaran={handleCreateKebugaranSubmission}
+            />
+          </div>
+        )}
+
+        {/* ADMIN DASHBOARD VIEW (Admin edits the working draft) */}
+        {isAdminAuthenticated && currentView === 'admin' && (
+          <AdminDashboard
+            menus={menus}
+            setMenus={setMenus}
+            profile={profile}
+            setProfile={setProfile}
+            liveMenus={liveMenus}
+            liveProfile={liveProfile}
+            logs={logs}
+            setLogs={setLogs}
+            onOpenPublicPreview={() => setCurrentView('public')}
+            onOpenQR={() => setIsQRModalOpen(true)}
+            onSimulateClick={handleSimulateClick}
+            onClearLogs={handleClearLogs}
+            adminPin={adminPin}
+            setAdminPin={handleUpdateAdminPin}
+            onLogout={handleAdminLogout}
+            onPublish={handlePublishLive}
+            isPublishing={isPublishing}
+            lastPublishedAt={lastPublishedAt}
+            wfaSubmissions={wfaSubmissions}
+            onUpdateWfaStatus={handleUpdateWfaStatus}
+            onDeleteWfaSubmission={handleDeleteWfaSubmission}
+            kebugaranSubmissions={kebugaranSubmissions}
+            onDeleteKebugaranSubmission={handleDeleteKebugaranSubmission}
+            onOpenKebugaranModal={() => setIsAdminKebugaranModalOpen(true)}
+          />
+        )}
+
+        {/* SPLIT DUAL VIEW (Admin Workspace on Left + Live Interactive Preview on Right) */}
+        {isAdminAuthenticated && currentView === 'split' && (
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden min-h-[calc(100vh-56px)] bg-slate-100/60">
+            {/* Left 7 cols: Admin Controls */}
+            <div className="lg:col-span-7 border-r border-slate-200 overflow-y-auto max-h-[calc(100vh-56px)] bg-slate-50">
+              <AdminDashboard
+                menus={menus}
+                setMenus={setMenus}
+                profile={profile}
+                setProfile={setProfile}
+                liveMenus={liveMenus}
+                liveProfile={liveProfile}
+                logs={logs}
+                setLogs={setLogs}
+                onOpenPublicPreview={() => setCurrentView('public')}
+                onOpenQR={() => setIsQRModalOpen(true)}
+                onSimulateClick={handleSimulateClick}
+                onClearLogs={handleClearLogs}
+                adminPin={adminPin}
+                setAdminPin={handleUpdateAdminPin}
+                onLogout={handleAdminLogout}
+                onPublish={handlePublishLive}
+                isPublishing={isPublishing}
+                lastPublishedAt={lastPublishedAt}
+                wfaSubmissions={wfaSubmissions}
+                onUpdateWfaStatus={handleUpdateWfaStatus}
+                onDeleteWfaSubmission={handleDeleteWfaSubmission}
+                kebugaranSubmissions={kebugaranSubmissions}
+                onDeleteKebugaranSubmission={handleDeleteKebugaranSubmission}
+                onOpenKebugaranModal={() => setIsAdminKebugaranModalOpen(true)}
+              />
+            </div>
+
+            {/* Right 5 cols: Live Public Microsite Screen */}
+            <div className="lg:col-span-5 bg-slate-200/50 overflow-y-auto max-h-[calc(100vh-56px)] p-6 flex flex-col items-center justify-start">
+              <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xl">
+                <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between text-xs text-slate-500">
+                  <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    Pratinjau Hasil Edit
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    (Mode Pratinjau Interaktif)
+                  </span>
+                </div>
+                <PublicMicrosite
+                  profile={profile}
+                  menus={menus}
+                  onMenuClick={handleMenuClick}
+                  onOpenQR={() => setIsQRModalOpen(true)}
+                  isStandalone={false}
+                  lastPublishedAt={lastPublishedAt}
+                  wfaSubmissions={wfaSubmissions}
+                  onSubmitWfa={handleCreateWfaSubmission}
+                  kebugaranSubmissions={kebugaranSubmissions}
+                  onSubmitKebugaran={handleCreateKebugaranSubmission}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Global Publish Success Toast Notification */}
+      <AnimatePresence>
+        {publishSuccessToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 bg-slate-900 text-white rounded-xl shadow-2xl border border-emerald-500/40 text-xs"
+          >
+            <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+              <CheckCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="font-bold text-white flex items-center gap-1.5">
+                <span>Berhasil Diposting!</span>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded">Live</span>
+              </div>
+              <p className="text-slate-300 text-[11px] mt-0.5">
+                Halaman pegawai telah diperbarui sesuai perubahan admin terbaru.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Publish Success Interactive Dialog */}
+      <AnimatePresence>
+        {showPublishSuccessModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden"
+            >
+              <div className="p-6 text-center space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/30">
+                  <CheckCheck className="w-9 h-9" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Perubahan Berhasil Diposting!
+                  </h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Semua perubahan menu, tautan, dan tema telah diperbarui dan langsung tayang pada <strong>Halaman Portal Pegawai</strong>.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-left text-xs space-y-1.5 font-mono">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Total Tombol Aktif:</span>
+                    <span className="font-bold text-slate-900">{liveMenus.filter(m => m.isActive).length} Menu</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Tema Tampilan:</span>
+                    <span className="font-bold text-slate-900">{liveProfile.theme.name}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Status Cloud Database:</span>
+                    <span className={`font-bold flex items-center gap-1 ${publishStatus?.cloudSynced ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {publishStatus?.cloudSynced ? '🟢 Sinkron (Semua Device)' : '🟡 Tersimpan Lokal'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Waktu Publikasi:</span>
+                    <span className="font-bold text-emerald-600">
+                      {new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
+                  <button
+                    onClick={() => {
+                      setShowPublishSuccessModal(false);
+                      setCurrentView('public');
+                    }}
+                    className="flex-1 py-2.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95"
+                  >
+                    <span>👁️ Buka Halaman Pegawai</span>
+                  </button>
+                  <button
+                    onClick={() => setShowPublishSuccessModal(false)}
+                    className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors"
+                  >
+                    Tetap di Dashboard
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Admin Authentication Modal */}
+      <AdminAuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={handleAuthSuccess}
+        savedPin={adminPin}
+      />
+
+      {/* QR Code Sharing Modal */}
+      <QRCodeModal
+        isOpen={isQRModalOpen}
+        onClose={() => setIsQRModalOpen(false)}
+        profile={profile}
+        publicUrl={window.location.href.split('#')[0].split('?')[0]}
+      />
+
+      {/* Floating Kebugaran Modal (when triggered directly from Admin Monitoring tab) */}
+      <KebugaranModal
+        isOpen={isAdminKebugaranModalOpen}
+        onClose={() => setIsAdminKebugaranModalOpen(false)}
+        onSubmit={handleCreateKebugaranSubmission}
+        allSubmissions={kebugaranSubmissions}
+        logoUrl={profile.avatarUrl}
+      />
+    </div>
+  );
+}
+

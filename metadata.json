@@ -1,0 +1,8 @@
+{
+  "name": "Direct Menu Microsite & Admin",
+  "description": "Portal layanan kepegawaian internal dengan formulir input data kebugaran berkala (Triwulan I-IV), monitoring tes kebugaran pegawai, ekspor Excel & cetak rekapan, pengajuan WFA, analitik klik, dan kustomisasi menu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

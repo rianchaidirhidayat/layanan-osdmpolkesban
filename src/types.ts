@@ -1,0 +1,189 @@
+export type ButtonSize = 'compact' | 'medium' | 'large' | 'featured' | 'bento-square' | 'bento-wide';
+
+export type ButtonActionType = 
+  | 'whatsapp' 
+  | 'instagram' 
+  | 'link' 
+  | 'phone' 
+  | 'email' 
+  | 'catalog' 
+  | 'location' 
+  | 'youtube' 
+  | 'tiktok' 
+  | 'custom';
+
+export type AnimationEffect = 'none' | 'pulse' | 'bounce' | 'glow' | 'shimmer';
+
+export type BackgroundType = 'gradient' | 'mesh' | 'solid' | 'glass' | 'dark-neon' | 'warm-paper' | 'custom-image';
+
+export interface MenuItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  url: string;
+  type: ButtonActionType;
+  size: ButtonSize;
+  bgColor: string;
+  textColor: string;
+  borderColor?: string;
+  isGradient: boolean;
+  gradientTo?: string;
+  gradientAngle?: number;
+  iconName: string;
+  badgeText?: string;
+  badgeBgColor?: string;
+  badgeTextColor?: string;
+  isActive: boolean;
+  order: number;
+  animation: AnimationEffect;
+  clickCount: number;
+  category?: string;
+  openInNewTab: boolean;
+  priceTag?: string;
+  customCss?: string;
+  isProtected?: boolean;
+  pinCode?: string;
+  pinHint?: string;
+}
+
+export interface SocialLink {
+  id: string;
+  platform: 'whatsapp' | 'instagram' | 'tiktok' | 'youtube' | 'facebook' | 'twitter' | 'maps' | 'email' | 'phone' | 'website';
+  url: string;
+  label: string;
+  isActive: boolean;
+}
+
+export interface ThemeConfig {
+  id: string;
+  name: string;
+  bgType: BackgroundType;
+  primaryBg: string;
+  secondaryBg: string;
+  accentColor: string;
+  textColor: string;
+  subtextColor: string;
+  cardRadius: 'rounded-lg' | 'rounded-xl' | 'rounded-2xl' | 'rounded-3xl' | 'rounded-full';
+  cardGlassEffect: boolean;
+  fontFamily: 'sans' | 'outfit' | 'mono';
+  layoutStyle: 'stacked' | 'bento';
+  customBgImage?: string;
+  bgOverlayColor?: string;
+  bgOverlayOpacity?: number; // 0 to 100 (%)
+  bgBlur?: number; // 0 to 20 (px)
+  bgFit?: 'cover' | 'contain' | 'tile';
+}
+
+export type LogoShape = 'landscape' | 'circle' | 'rounded-square' | 'banner' | 'auto';
+
+export interface MicrositeProfile {
+  name: string;
+  tagline: string;
+  bio: string;
+  avatarUrl: string;
+  logoShape?: LogoShape;
+  logoHeight?: number;
+  logoBackground?: 'transparent' | 'white' | 'dark' | 'glass';
+  coverUrl?: string;
+  isVerified: boolean;
+  location: string;
+  openingHours?: string;
+  socialLinks: SocialLink[];
+  footerText?: string;
+  footerBadgeText?: string;
+  footerCopyright?: string;
+  tabTitle?: string;
+  faviconUrl?: string;
+  theme: ThemeConfig;
+  osdmContactWa?: string;
+}
+
+export interface ClickLog {
+  id: string;
+  menuId: string;
+  menuTitle: string;
+  category?: string;
+  timestamp: string; // ISO string
+  device: 'Mobile' | 'Desktop' | 'Tablet';
+  browser: string;
+  referrer: string;
+}
+
+export interface AnalyticsSummary {
+  totalClicks: number;
+  totalViews: number;
+  ctr: number; // percentage
+  topButton: {
+    id: string;
+    title: string;
+    clicks: number;
+  } | null;
+  todayClicks: number;
+}
+
+export type WfaLocation =
+  | 'Kota Bandung'
+  | 'Kabupaten Bandung'
+  | 'Kota Bogor'
+  | 'Kabupaten Bogor'
+  | 'Kota Karawang'
+  | 'Kabupaten Karawang'
+  | string;
+export type WfaValidationStatus = 'Menunggu Validasi' | 'Valid' | 'Ditolak';
+
+export interface WfaSubmission {
+  id: string;
+  nip: string;
+  employeeName: string;
+  unitKerja?: string;
+  jabatan?: string;
+  nomorWa?: string;
+  tanggalWfa: string; // YYYY-MM-DD
+  namaKegiatan: string;
+  lokasiKegiatan: WfaLocation;
+  lokasiLahanBimbingan: string;
+  statusWfa: string; // 'WFA Datang' | 'WFA Pulang' | 'WFA Datang & WFA Pulang'
+  linkSuratTugas: string;
+  status: WfaValidationStatus;
+  catatanPengelola?: string;
+  createdAt: string; // ISO string
+  validatedAt?: string;
+  validatedBy?: string;
+}
+
+export interface EmployeeRecord {
+  nip: string;
+  name: string;
+  unitKerja: string;
+  jabatan: string;
+  email?: string;
+  nomorWa?: string;
+  tanggalLahir?: string;
+  nik?: string;
+}
+
+export type KebugaranPeriode = 'Triwulan I' | 'Triwulan II' | 'Triwulan III' | 'Triwulan IV';
+export type GulaDarahType = 'GDS' | 'GDP';
+
+export interface KebugaranSubmission {
+  id: string;
+  tanggalPeriksa: string; // YYYY-MM-DD
+  periode: KebugaranPeriode; // 'Triwulan I' s.d 'Triwulan IV'
+  nip: string;
+  namaPegawai: string;
+  tanggalLahir: string; // YYYY-MM-DD or formatted string
+  unitKerja: string;
+  nik: string;
+  tensiSistolik: number; // mmHg
+  tensiDiastolik: number; // mmHg
+  beratBadan: number; // kg
+  tinggiBadan: number; // cm
+  lingkarPinggang: number; // cm
+  tipeGulaDarah: GulaDarahType; // 'GDS' | 'GDP'
+  gulaDarah: number; // mg/dL
+  kolesterol: number; // mg/dL
+  nomorWa: string;
+  fasyankes: string; // Fasyankes pemeriksaan kebugaran
+  catatan?: string;
+  createdAt: string; // ISO string
+}

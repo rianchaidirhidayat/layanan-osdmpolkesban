@@ -1,0 +1,1250 @@
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  X,
+  Sparkles,
+  Palette,
+  Layers,
+  Link as LinkIcon,
+  MessageCircle,
+  Eye,
+  Check,
+  Type,
+  Maximize2,
+  Zap,
+  Tag,
+  Search,
+  CheckCircle,
+  Upload,
+  Image as ImageIcon,
+  Trash2,
+  RotateCcw,
+  Smile,
+  Globe,
+  Lock,
+  EyeOff,
+  KeyRound,
+  ShieldCheck
+} from 'lucide-react';
+import { MenuItem, ButtonSize, ButtonActionType, AnimationEffect, ThemeConfig } from '../types';
+import { AVAILABLE_ICONS, getIconComponent } from '../utils/iconMap';
+import { DirectMenuButton } from './DirectMenuButton';
+import { optimizeImageForStorage } from '../utils/imageOptimizer';
+
+interface AdminMenuEditorModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (menu: MenuItem) => void;
+  initialMenu: MenuItem | null;
+  currentTheme: ThemeConfig;
+  availableCategories: string[];
+}
+
+const COLOR_PRESETS = [
+  { name: 'Corporate Blue', bg: '#1e3a8a', to: '#1e40af', border: '#3b82f6', text: '#ffffff' },
+  { name: 'Teal Emerald', bg: '#047857', to: '#065f46', border: '#10b981', text: '#ffffff' },
+  { name: 'Indigo Executive', bg: '#4f46e5', to: '#4338ca', border: '#6366f1', text: '#ffffff' },
+  { name: 'Sky Blue', bg: '#0284c7', to: '#0369a1', border: '#38bdf8', text: '#ffffff' },
+  { name: 'Violet Purple', bg: '#7c3aed', to: '#6d28d9', border: '#8b5cf6', text: '#ffffff' },
+  { name: 'Teal Modern', bg: '#0d9488', to: '#0f766e', border: '#14b8a6', text: '#ffffff' },
+  { name: 'Slate Dark', bg: '#1e293b', to: '#0f172a', border: '#334155', text: '#f8fafc' },
+  { name: 'Amber Alert', bg: '#d97706', to: '#b45309', border: '#f59e0b', text: '#ffffff' },
+  { name: 'Rose Urgent', bg: '#e11d48', to: '#be123c', border: '#f43f5e', text: '#ffffff' },
+  { name: 'Minimal Charcoal', bg: '#121212', to: '#1c1c1c', border: '#2e2e2e', text: '#ffffff' },
+];
+
+const BADGE_PRESETS = [
+  { text: '⚡ WAJIB HARIAN', bg: '#3b82f6', color: '#ffffff' },
+  { text: '🔒 AKSES AMAN', bg: '#10b981', color: '#ffffff' },
+  { text: '📋 E-APPROVAL', bg: '#0284c7', color: '#ffffff' },
+  { text: '✨ UPDATE 2026', bg: '#6366f1', color: '#ffffff' },
+  { text: '🏥 BENEFIT', bg: '#7c3aed', color: '#ffffff' },
+  { text: '📑 DOKUMEN SOP', bg: '#334155', color: '#ffffff' },
+  { text: '🚨 PENTING', bg: '#ef4444', color: '#ffffff' },
+];
+
+export const AdminMenuEditorModal: React.FC<AdminMenuEditorModalProps> = ({
+  isOpen,
+  onClose,
+  onSave,
+  initialMenu,
+  currentTheme,
+  availableCategories,
+}) => {
+  const [formData, setFormData] = useState<MenuItem>({
+    id: '',
+    title: '',
+    subtitle: '',
+    url: '',
+    type: 'link',
+    size: 'medium',
+    bgColor: '#4f46e5',
+    textColor: '#ffffff',
+    borderColor: '#6366f1',
+    isGradient: true,
+    gradientTo: '#4338ca',
+    gradientAngle: 135,
+    iconName: 'Link',
+    badgeText: '',
+    badgeBgColor: '#f59e0b',
+    badgeTextColor: '#000000',
+    isActive: true,
+    order: 1,
+    animation: 'none',
+    clickCount: 0,
+    category: 'Kepegawaian & HR',
+    openInNewTab: true,
+    priceTag: '',
+    isProtected: false,
+    pinCode: '',
+    pinHint: '',
+  });
+
+  const [iconSearch, setIconSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<'content' | 'appearance' | 'icon' | 'badge' | 'security'>('content');
+  const [showAdminPinInput, setShowAdminPinInput] = useState(false);
+  const [isIconDragging, setIsIconDragging] = useState(false);
+  const [iconFilterMode, setIconFilterMode] = useState<'all' | 'lucide' | 'emoji' | 'uploaded'>('all');
+  const [customIconUrlInput, setCustomIconUrlInput] = useState('');
+
+  const POPULAR_WORK_EMOJIS = [
+    '🕒', '📄', '🌴', '🏥', '💻', '📚', '✈️', '🎓', '⚡', '🔒',
+    '📋', '📊', '💼', '🏢', '🏛️', '☕', '🎫', '🛠️', '📞', '✉️',
+    '🌐', '📍', '🔔', '📢', '💡', '🛡️', '🎯', '🚀', '⭐', '✨'
+  ];
+
+  const handleIconUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Harap unggah file gambar (PNG, SVG, JPG, WebP, ICO, GIF).');
+      return;
+    }
+    try {
+      // Auto compress and optimize to compact 160x160 webp/png (< 10 KB)
+      const compressedDataUrl = await optimizeImageForStorage(file, 160, 160, 0.85);
+      if (compressedDataUrl) {
+        setFormData((prev) => ({
+          ...prev,
+          iconName: compressedDataUrl,
+        }));
+      }
+    } catch (err) {
+      console.warn('Error compressing icon:', err);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (e.target?.result) {
+          setFormData((prev) => ({
+            ...prev,
+            iconName: e.target?.result as string,
+          }));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // WhatsApp quick helper state
+  const [waPhone, setWaPhone] = useState('6281234567890');
+  const [waMessage, setWaMessage] = useState('Halo Helpdesk HR/IT, saya pegawai ingin menanyakan...');
+
+  useEffect(() => {
+    if (initialMenu) {
+      setFormData({ ...initialMenu });
+    } else {
+      setFormData({
+        id: `menu-${Date.now()}`,
+        title: '',
+        subtitle: '',
+        url: '',
+        type: 'link',
+        size: 'medium',
+        bgColor: '#1e3a8a',
+        textColor: '#ffffff',
+        borderColor: '#3b82f6',
+        isGradient: true,
+        gradientTo: '#1e40af',
+        gradientAngle: 135,
+        iconName: 'CalendarCheck',
+        badgeText: '',
+        badgeBgColor: '#3b82f6',
+        badgeTextColor: '#ffffff',
+        isActive: true,
+        order: Date.now(),
+        animation: 'none',
+        clickCount: 0,
+        category: 'Kepegawaian & HR',
+        openInNewTab: true,
+        priceTag: '',
+        isProtected: false,
+        pinCode: '',
+        pinHint: '',
+      });
+    }
+  }, [initialMenu, isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.title.trim()) {
+      alert('Mohon isi judul menu!');
+      return;
+    }
+    if (formData.isProtected && (!formData.pinCode || formData.pinCode.trim() === '')) {
+      alert('Anda mengaktifkan Proteksi PIN. Mohon tentukan kode PIN terlebih dahulu pada tab "Keamanan PIN"!');
+      setActiveTab('security');
+      return;
+    }
+    onSave(formData);
+    onClose();
+  };
+
+  const handleApplyWa = () => {
+    const cleanPhone = waPhone.replace(/\D/g, '');
+    const encodedMsg = encodeURIComponent(waMessage);
+    const generatedUrl = `https://wa.me/${cleanPhone}?text=${encodedMsg}`;
+    setFormData((prev) => ({
+      ...prev,
+      url: generatedUrl,
+      type: 'whatsapp',
+      iconName: 'MessageCircle',
+    }));
+  };
+
+  const filteredIcons = AVAILABLE_ICONS.filter((icon) =>
+    icon.toLowerCase().includes(iconSearch.toLowerCase())
+  );
+
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs overflow-y-auto font-sans">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, y: 10 }}
+          className="relative w-full max-w-4xl bg-white border border-slate-200 rounded-2xl shadow-2xl text-slate-900 overflow-hidden flex flex-col max-h-[92vh]"
+        >
+          {/* Top Bar */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                  {initialMenu ? 'Edit Menu Direct' : 'Tambah Menu Direct Baru'}
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Sesuaikan ukuran, tema warna, ikon, dan tautan tombol
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Body Content (Split Layout: Form & Live Real-time Button Preview) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 overflow-y-auto flex-1">
+            {/* Left Column: Configuration Controls */}
+            <div className="lg:col-span-7 p-5 sm:p-6 border-b lg:border-b-0 lg:border-r border-slate-200 space-y-5">
+              {/* Navigation Tabs */}
+              <div className="flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-lg overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('content')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all flex-1 justify-center ${
+                    activeTab === 'content'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Type className="w-3.5 h-3.5" />
+                  Konten & Link
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('appearance')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all flex-1 justify-center ${
+                    activeTab === 'appearance'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Palette className="w-3.5 h-3.5" />
+                  Ukuran & Tema
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('icon')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all flex-1 justify-center ${
+                    activeTab === 'icon'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  Ikon ({formData.iconName})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('badge')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all flex-1 justify-center ${
+                    activeTab === 'badge'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  Badge & Efek
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('security')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all flex-1 justify-center ${
+                    activeTab === 'security'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Keamanan PIN</span>
+                  {formData.isProtected && (
+                    <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Proteksi PIN Aktif" />
+                  )}
+                </button>
+              </div>
+
+              {/* TAB 1: KONTEN & LINK */}
+              {activeTab === 'content' && (
+                <div className="space-y-4">
+                  {/* Title */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Judul Tombol Menu <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Contoh: 🕒 Presensi & Log Absensi Online"
+                      value={formData.title}
+                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                    />
+                  </div>
+
+                  {/* Subtitle / Description */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Deskripsi Singkat / Subtitle (Opsional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: Clock-in/out, rekap kehadiran bulanan, jadwal shift"
+                      value={formData.subtitle || ''}
+                      onChange={(e) => setFormData({ ...formData, subtitle: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                    />
+                  </div>
+
+                  {/* Category & Action Type */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                        Kategori Menu
+                      </label>
+                      <input
+                        type="text"
+                        list="categories-list"
+                        placeholder="Kepegawaian & HR, Fasilitas & IT, dsb."
+                        value={formData.category || ''}
+                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                      />
+                      <datalist id="categories-list">
+                        {availableCategories.map((c) => (
+                          <option key={c} value={c} />
+                        ))}
+                      </datalist>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                        Tipe Aksi
+                      </label>
+                      <select
+                        value={formData.type}
+                        onChange={(e) => setFormData({ ...formData, type: e.target.value as ButtonActionType })}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                      >
+                        <option value="link">🔗 Tautan Sistem / Portal Internal</option>
+                        <option value="whatsapp">💬 WhatsApp Helpdesk HR / IT</option>
+                        <option value="catalog">📖 Dokumen PDF / SOP Pegawai</option>
+                        <option value="location">📍 Lokasi Kantor / Cabang</option>
+                        <option value="email">✉️ Email HR / Departemen</option>
+                        <option value="phone">📞 Telepon / Hotline Internal</option>
+                        <option value="custom">⚡ Tautan URL Kustom</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Direct URL */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        URL Akses / Direct Link
+                      </label>
+                      <span className="text-[10px] text-slate-500">
+                        Bisa link eksternal atau form internal portal
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="https://... atau #input-kebugaran"
+                        value={formData.url}
+                        onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                      />
+                      <LinkIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    </div>
+
+                    {/* Quick Internal Form Presets */}
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-slate-500 mr-1">Direct Form Preset:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            url: '#input-kebugaran',
+                            title: prev.title || 'Formulir Input Data Kebugaran',
+                            subtitle: prev.subtitle || 'Pencatatan data kesehatan & tes kebugaran berkala pegawai',
+                            icon: prev.icon === 'Link' ? 'Activity' : prev.icon,
+                            badgeText: prev.badgeText || 'TES KEBUGARAN',
+                            badgeColor: prev.badgeColor || '#0284c7',
+                            type: 'link',
+                          }));
+                        }}
+                        className={`px-2 py-1 rounded-md text-[11px] font-semibold border transition-all flex items-center gap-1 ${
+                          formData.url === '#input-kebugaran'
+                            ? 'bg-sky-50 border-sky-300 text-sky-800 font-bold'
+                            : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+                        }`}
+                        title="Klik untuk set URL ke Formulir Input Kebugaran Pegawai"
+                      >
+                        <span>🏃 #input-kebugaran</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            url: '#wfa-bimbingan',
+                            title: prev.title || 'Formulir Pengajuan WFA',
+                            subtitle: prev.subtitle || 'Pengajuan kerja fleksibel & bimbingan tugas belajar',
+                            icon: prev.icon === 'Link' ? 'FileSignature' : prev.icon,
+                            badgeText: prev.badgeText || 'E-APPROVAL',
+                            type: 'link',
+                          }));
+                        }}
+                        className={`px-2 py-1 rounded-md text-[11px] font-semibold border transition-all flex items-center gap-1 ${
+                          formData.url === '#wfa-bimbingan'
+                            ? 'bg-blue-50 border-blue-300 text-blue-800 font-bold'
+                            : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+                        }`}
+                        title="Klik untuk set URL ke Formulir Pengajuan WFA"
+                      >
+                        <span>📋 #wfa-bimbingan</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* WhatsApp Quick Builder Helper */}
+                  {formData.type === 'whatsapp' && (
+                    <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2.5">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>Generator Tautan WhatsApp Langsung</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          placeholder="Nomor WA (contoh: 6281234567890)"
+                          value={waPhone}
+                          onChange={(e) => setWaPhone(e.target.value)}
+                          className="px-3 py-1.5 bg-white border border-emerald-200 rounded-lg text-xs text-slate-900"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Pesan Otomatis"
+                          value={waMessage}
+                          onChange={(e) => setWaMessage(e.target.value)}
+                          className="px-3 py-1.5 bg-white border border-emerald-200 rounded-lg text-xs text-slate-900"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleApplyWa}
+                        className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"
+                      >
+                        Terapkan ke URL Direct
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Price tag */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Tag Harga / Catatan Tambahan (Opsional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: Rp 35.000 atau Diskon 50%"
+                      value={formData.priceTag || ''}
+                      onChange={(e) => setFormData({ ...formData, priceTag: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                    />
+                  </div>
+
+                  {/* Active Toggle & Open New Tab */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={formData.isActive}
+                        onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                        className="w-4 h-4 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                      />
+                      <span>Tampilkan Menu (Status Aktif)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={formData.openInNewTab}
+                        onChange={(e) => setFormData({ ...formData, openInNewTab: e.target.checked })}
+                        className="w-4 h-4 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                      />
+                      <span>Buka di Tab Baru</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: UKURAN & TEMA WARNA */}
+              {activeTab === 'appearance' && (
+                <div className="space-y-5">
+                  {/* Real-time Button Size Selection */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-2">
+                      Pilih Ukuran Tombol Menu (Real-time Scale)
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {[
+                        { size: 'compact', label: 'Compact', desc: 'Ringkas & ramping' },
+                        { size: 'medium', label: 'Medium', desc: 'Standar seimbang' },
+                        { size: 'large', label: 'Large', desc: 'Besar & terkemuka' },
+                        { size: 'featured', label: 'Featured', desc: 'Hero sorotan utama' },
+                        { size: 'bento-square', label: 'Bento 1x1', desc: 'Kotak grid bento' },
+                        { size: 'bento-wide', label: 'Bento 2x1', desc: 'Lebar grid bento' },
+                      ].map((item) => (
+                        <button
+                          key={item.size}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, size: item.size as ButtonSize })}
+                          className={`
+                            p-3 rounded-xl border text-left transition-all
+                            ${
+                              formData.size === item.size
+                                ? 'border-2 border-indigo-600 bg-indigo-50/80 text-slate-900 shadow-xs'
+                                : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'
+                            }
+                          `}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-900">{item.label}</span>
+                            {formData.size === item.size && <CheckCircle className="w-3.5 h-3.5 text-indigo-600" />}
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5">{item.desc}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Color Palettes Preset */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-2">
+                      Preset Tema Warna Siap Pakai
+                    </label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {COLOR_PRESETS.map((preset) => (
+                        <button
+                          key={preset.name}
+                          type="button"
+                          onClick={() =>
+                            setFormData({
+                              ...formData,
+                              bgColor: preset.bg,
+                              gradientTo: preset.to,
+                              borderColor: preset.border,
+                              textColor: preset.text,
+                              isGradient: true,
+                            })
+                          }
+                          className="flex flex-col items-center gap-1 p-2 rounded-lg bg-slate-50 border border-slate-200 hover:border-slate-400 transition-all group"
+                        >
+                          <div
+                            style={{
+                              background: `linear-gradient(135deg, ${preset.bg}, ${preset.to})`,
+                            }}
+                            className="w-full h-6 rounded shadow-inner"
+                          />
+                          <span className="text-[10px] text-slate-600 group-hover:text-slate-900 truncate w-full text-center">
+                            {preset.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Custom Hex Color Pickers */}
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                    <h4 className="text-xs font-bold text-slate-800">Kustomisasi Warna Presisi</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-1">Warna Latar Utama</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={formData.bgColor}
+                            onChange={(e) => setFormData({ ...formData, bgColor: e.target.value })}
+                            className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+                          />
+                          <input
+                            type="text"
+                            value={formData.bgColor}
+                            onChange={(e) => setFormData({ ...formData, bgColor: e.target.value })}
+                            className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-xs font-mono text-slate-900"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-1">Warna Gradien Akhir</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={formData.gradientTo || formData.bgColor}
+                            onChange={(e) => setFormData({ ...formData, gradientTo: e.target.value })}
+                            className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+                          />
+                          <input
+                            type="text"
+                            value={formData.gradientTo || ''}
+                            onChange={(e) => setFormData({ ...formData, gradientTo: e.target.value })}
+                            className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-xs font-mono text-slate-900"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-1">Warna Teks</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={formData.textColor}
+                            onChange={(e) => setFormData({ ...formData, textColor: e.target.value })}
+                            className="w-8 h-8 rounded cursor-pointer bg-transparent border-0"
+                          />
+                          <input
+                            type="text"
+                            value={formData.textColor}
+                            onChange={(e) => setFormData({ ...formData, textColor: e.target.value })}
+                            className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-xs font-mono text-slate-900"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={formData.isGradient}
+                          onChange={(e) => setFormData({ ...formData, isGradient: e.target.checked })}
+                          className="w-4 h-4 rounded text-indigo-600 border-slate-300"
+                        />
+                        <span>Gunakan Efek Gradasi Halus</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: IKON & SIMBOL MENU */}
+              {activeTab === 'icon' && (() => {
+                const isCustomUploaded =
+                  formData.iconName.startsWith('data:image/') ||
+                  formData.iconName.startsWith('blob:') ||
+                  formData.iconName.startsWith('http://') ||
+                  formData.iconName.startsWith('https://');
+
+                return (
+                  <div className="space-y-4">
+                    {/* Status Ikon Saat Ini */}
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          style={{
+                            background: formData.isGradient
+                              ? `linear-gradient(135deg, ${formData.bgColor}, ${formData.gradientTo || formData.bgColor})`
+                              : formData.bgColor,
+                            color: formData.textColor,
+                          }}
+                          className="w-11 h-11 rounded-lg flex items-center justify-center p-1.5 shadow-xs overflow-hidden shrink-0"
+                        >
+                          {getIconComponent(formData.iconName, 'w-6 h-6')}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-800">
+                              {isCustomUploaded ? 'Ikon Kustom (Dari Komputer)' : 'Simbol Terpilih'}
+                            </span>
+                            {isCustomUploaded ? (
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full">
+                                File Komputer Aktif
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-indigo-100 text-indigo-700 font-mono font-medium px-2 py-0.5 rounded">
+                                {formData.iconName}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            {isCustomUploaded
+                              ? 'Ikon berhasil diambil dari komputer dan siap tampil pada tombol menu.'
+                              : 'Anda dapat mengganti dengan upload gambar dari komputer atau pilih simbol di bawah.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {isCustomUploaded && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, iconName: 'Link' })}
+                          className="px-2.5 py-1.5 text-[11px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors flex items-center gap-1 shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Reset ke Bawaan</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Section 1: Upload Ikon dari Komputer */}
+                    <div className="p-4 bg-indigo-50/40 border border-indigo-100 rounded-xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Upload className="w-4 h-4 text-indigo-600" />
+                          <label className="text-xs font-bold text-slate-800">
+                            Unggah Ikon dari Komputer
+                          </label>
+                        </div>
+                        <span className="text-[10px] font-medium text-slate-500">
+                          PNG, SVG, JPG, WebP, ICO
+                        </span>
+                      </div>
+
+                      {/* Dropzone Upload */}
+                      <div
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setIsIconDragging(true);
+                        }}
+                        onDragLeave={() => setIsIconDragging(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setIsIconDragging(false);
+                          const file = e.dataTransfer.files?.[0];
+                          if (file) handleIconUpload(file);
+                        }}
+                        className={`
+                          border-2 border-dashed rounded-xl p-4 text-center transition-all cursor-pointer
+                          ${
+                            isIconDragging
+                              ? 'border-indigo-500 bg-indigo-100/50 scale-[1.01]'
+                              : 'border-indigo-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/20'
+                          }
+                        `}
+                      >
+                        <input
+                          id="menu-icon-file-input"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleIconUpload(file);
+                          }}
+                        />
+                        <label
+                          htmlFor="menu-icon-file-input"
+                          className="cursor-pointer flex flex-col items-center justify-center space-y-1.5"
+                        >
+                          <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                            <ImageIcon className="w-4 h-4" />
+                          </div>
+                          <span className="text-xs font-bold text-indigo-700 hover:text-indigo-800">
+                            Pilih File Ikon dari Komputer
+                          </span>
+                          <p className="text-[11px] text-slate-500 max-w-sm">
+                            Klik di sini atau geser file gambar ke kotak ini. Disarankan gambar rasio 1:1 atau logo berlatar transparan (PNG/SVG).
+                          </p>
+                        </label>
+                      </div>
+
+                      {/* Alternatif: Input URL Ikon Eksternal */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <div className="relative flex-1">
+                          <Globe className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="url"
+                            placeholder="Atau tempel URL gambar ikon kustom (https://...)"
+                            value={customIconUrlInput}
+                            onChange={(e) => setCustomIconUrlInput(e.target.value)}
+                            className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!customIconUrlInput.trim()}
+                          onClick={() => {
+                            if (customIconUrlInput.trim()) {
+                              setFormData({ ...formData, iconName: customIconUrlInput.trim() });
+                              setCustomIconUrlInput('');
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white rounded-lg text-xs font-semibold shrink-0 transition-colors"
+                        >
+                          Terapkan URL
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Section 2: Koleksi Simbol Bawaan */}
+                    <div className="space-y-3 pt-1">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <Smile className="w-4 h-4 text-slate-600" />
+                          <span className="text-xs font-bold text-slate-800">
+                            Koleksi Simbol & Ikon Bawaan
+                          </span>
+                        </div>
+
+                        {/* Mode Filter Tab */}
+                        <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => setIconFilterMode('all')}
+                            className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all ${
+                              iconFilterMode === 'all'
+                                ? 'bg-white text-indigo-700 shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Semua
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIconFilterMode('emoji')}
+                            className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all ${
+                              iconFilterMode === 'emoji'
+                                ? 'bg-white text-indigo-700 shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Emoji ({POPULAR_WORK_EMOJIS.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIconFilterMode('lucide')}
+                            className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all ${
+                              iconFilterMode === 'lucide'
+                                ? 'bg-white text-indigo-700 shadow-xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Lucide ({AVAILABLE_ICONS.length})
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Koleksi Emoji */}
+                      {(iconFilterMode === 'all' || iconFilterMode === 'emoji') && (
+                        <div>
+                          <p className="text-[11px] font-semibold text-slate-600 mb-1.5">
+                            Simbol Emoji Populer Layanan Pegawai:
+                          </p>
+                          <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                            {POPULAR_WORK_EMOJIS.map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => setFormData({ ...formData, iconName: emoji })}
+                                title={`Gunakan simbol: ${emoji}`}
+                                className={`
+                                  w-9 h-9 rounded-lg flex items-center justify-center text-lg transition-all hover:scale-110
+                                  ${
+                                    formData.iconName === emoji
+                                      ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-400'
+                                      : 'bg-white hover:bg-slate-100 border border-slate-200'
+                                  }
+                                `}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Pencarian & Grid Ikon Lucide */}
+                      {(iconFilterMode === 'all' || iconFilterMode === 'lucide') && (
+                        <div className="space-y-2">
+                          <div className="relative">
+                            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                              type="text"
+                              placeholder="Cari simbol grafis (cth: Calendar, File, Briefcase, Graduation, Mail...)"
+                              value={iconSearch}
+                              onChange={(e) => setIconSearch(e.target.value)}
+                              className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-6 sm:grid-cols-8 gap-2 max-h-52 overflow-y-auto p-1.5 bg-slate-50 border border-slate-200 rounded-xl">
+                            {filteredIcons.map((iconName) => (
+                              <button
+                                key={iconName}
+                                type="button"
+                                onClick={() => setFormData({ ...formData, iconName })}
+                                className={`
+                                  p-2 rounded-lg flex flex-col items-center justify-center gap-1 transition-all
+                                  ${
+                                    formData.iconName === iconName
+                                      ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-400'
+                                      : 'bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
+                                  }
+                                `}
+                              >
+                                {getIconComponent(iconName, 'w-4 h-4')}
+                                <span className="text-[9px] truncate w-full text-center">{iconName}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* TAB 4: BADGE & EFEK ANIMASI */}
+              {activeTab === 'badge' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Teks Badge Label Sorotan (Opsional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: 🔥 PROMO HARI INI"
+                      value={formData.badgeText || ''}
+                      onChange={(e) => setFormData({ ...formData, badgeText: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  {/* Badge Presets */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Preset Badge Populer
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {BADGE_PRESETS.map((bp) => (
+                        <button
+                          key={bp.text}
+                          type="button"
+                          onClick={() =>
+                            setFormData({
+                              ...formData,
+                              badgeText: bp.text,
+                              badgeBgColor: bp.bg,
+                              badgeTextColor: bp.color,
+                            })
+                          }
+                          style={{ backgroundColor: bp.bg, color: bp.color }}
+                          className="px-2.5 py-1 rounded-full text-xs font-bold hover:scale-105 transition-transform"
+                        >
+                          {bp.text}
+                        </button>
+                      ))}
+                      {formData.badgeText && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, badgeText: '' })}
+                          className="px-2.5 py-1 rounded-full text-xs bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200"
+                        >
+                          Hapus Badge
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Animation Effects */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Efek Animasi Tombol
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {[
+                        { val: 'none', label: 'Tanpa Animasi', icon: X },
+                        { val: 'pulse', label: 'Denyut (Pulse)', icon: Zap },
+                        { val: 'bounce', label: 'Membal (Bounce)', icon: Sparkles },
+                        { val: 'glow', label: 'Cahaya (Glow)', icon: Sparkles },
+                        { val: 'shimmer', label: 'Kilauan (Shimmer)', icon: Sparkles },
+                      ].map((eff) => (
+                        <button
+                          key={eff.val}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, animation: eff.val as AnimationEffect })}
+                          className={`
+                            p-2.5 rounded-lg border text-xs font-medium flex items-center justify-center gap-1.5 transition-all
+                            ${
+                              formData.animation === eff.val
+                                ? 'border-2 border-indigo-600 bg-indigo-50 text-indigo-700 font-bold'
+                                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                            }
+                          `}
+                        >
+                          <span>{eff.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 5: KEAMANAN & PROTEKSI PIN */}
+              {activeTab === 'security' && (
+                <div className="space-y-4">
+                  {/* Security Intro Banner */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-lg bg-amber-100 text-amber-800 shrink-0 shadow-xs">
+                        <Lock className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-amber-950">
+                          Proteksi Menu Rahasia dengan PIN
+                        </h4>
+                        <p className="text-xs text-amber-800/90 mt-0.5 leading-relaxed">
+                          Aktifkan PIN jika menu ini berisi data rahasia atau terbatas (seperti slip gaji, dokumen evaluasi pimpinan, SK internal, atau form sensitif). Pegawai wajib memasukkan PIN sebelum dapat membuka tautan.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Main Toggle Card */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-xs">
+                    <label className="flex items-start gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={!!formData.isProtected}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setFormData({
+                            ...formData,
+                            isProtected: checked,
+                            pinCode: checked && !formData.pinCode ? '1234' : formData.pinCode,
+                          });
+                        }}
+                        className="w-4 h-4 mt-0.5 rounded text-amber-600 border-slate-300 focus:ring-amber-500"
+                      />
+                      <div className="flex-1">
+                        <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <span>Kunci Menu Ini dengan Kode PIN</span>
+                          {formData.isProtected && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-200">
+                              Aktif
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Ketika pegawai mengklik tombol ini di portal, jendela verifikasi PIN akan muncul secara otomatis.
+                        </p>
+                      </div>
+                    </label>
+
+                    {formData.isProtected && (
+                      <div className="mt-4 pt-4 border-t border-slate-100 space-y-4">
+                        {/* PIN Code Field */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                              <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Kode PIN Akses</span>
+                              <span className="text-rose-500">*</span>
+                            </label>
+                            <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                              <span className="hidden sm:inline">Pilihan cepat:</span>
+                              {['1234', '2026', '9999'].map((presetPin) => (
+                                <button
+                                  key={presetPin}
+                                  type="button"
+                                  onClick={() => setFormData({ ...formData, pinCode: presetPin })}
+                                  className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono text-[10px] transition-colors"
+                                >
+                                  {presetPin}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="relative">
+                            <input
+                              type={showAdminPinInput ? 'text' : 'password'}
+                              placeholder="Masukkan kode PIN (misal: 1234 atau HRD77)"
+                              value={formData.pinCode || ''}
+                              onChange={(e) => setFormData({ ...formData, pinCode: e.target.value })}
+                              className="w-full pl-3.5 pr-10 py-2 bg-white border border-slate-200 rounded-lg text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowAdminPinInput(!showAdminPinInput)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                              tabIndex={-1}
+                              title={showAdminPinInput ? 'Sembunyikan PIN' : 'Lihat PIN'}
+                            >
+                              {showAdminPinInput ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            Bisa berupa 4-8 digit angka atau kombinasi huruf & angka rahasia.
+                          </p>
+                        </div>
+
+                        {/* Petunjuk PIN */}
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                            Petunjuk / Hint PIN untuk Pegawai (Opsional)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Contoh: Hubungi Bagian HRD / 4 digit NIP pimpinan"
+                            value={formData.pinHint || ''}
+                            onChange={(e) => setFormData({ ...formData, pinHint: e.target.value })}
+                            className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                          />
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            Petunjuk ini muncul di jendela verifikasi pegawai untuk memberi panduan kepada mereka yang berhak.
+                          </p>
+                        </div>
+
+                        {/* Status Summary Banner */}
+                        <div className="p-3 rounded-lg bg-amber-50/70 border border-amber-200 flex items-center justify-between text-xs">
+                          <span className="text-amber-900 font-medium">Tampilan Tombol:</span>
+                          <span className="font-bold text-amber-800 flex items-center gap-1">
+                            <Lock className="w-3.5 h-3.5" />
+                            Akan ada label badge & ikon kunci PIN
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: Real-time Live Button Preview */}
+            <div className="lg:col-span-5 p-5 sm:p-6 bg-slate-50 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                    Preview Tombol Real-time
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-white text-slate-600 font-mono border border-slate-200">
+                    Ukuran: {formData.size.toUpperCase()}
+                  </span>
+                </div>
+
+                <div className="p-4 sm:p-6 rounded-xl bg-white border border-slate-200 shadow-xs flex items-center justify-center min-h-[180px]">
+                  <div className="w-full max-w-sm">
+                    <DirectMenuButton
+                      menu={formData}
+                      theme={currentTheme}
+                      isPreviewMode={true}
+                      showClickBadge={true}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 p-3 rounded-lg bg-white border border-slate-200 text-xs space-y-1 text-slate-500 shadow-xs">
+                  <div className="flex justify-between">
+                    <span>Tipe URL:</span>
+                    <span className="text-slate-800 font-mono">{formData.type}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Animasi:</span>
+                    <span className="text-slate-800 font-mono">{formData.animation}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Status:</span>
+                    <span className={formData.isActive ? 'text-green-600 font-medium' : 'text-rose-600 font-medium'}>
+                      {formData.isActive ? 'Aktif' : 'Non-Aktif'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+                    <span>Proteksi PIN:</span>
+                    <span className={formData.isProtected ? 'text-amber-700 font-semibold flex items-center gap-1 text-[11px]' : 'text-slate-400 text-[11px]'}>
+                      {formData.isProtected ? (
+                        <>
+                          <Lock className="w-3 h-3 text-amber-600" />
+                          <span>Terkunci PIN ({formData.pinCode || '...'})</span>
+                        </>
+                      ) : (
+                        'Tidak Terkunci'
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Action Buttons */}
+              <div className="pt-6 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-colors shadow-xs"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  Simpan Perubahan
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+};
