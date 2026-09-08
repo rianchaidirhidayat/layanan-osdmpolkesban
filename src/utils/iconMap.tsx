@@ -53,10 +53,20 @@ import {
   QrCode,
   Search,
   FileCheck,
+  LayoutDashboard,
+  Database,
+  Palmtree,
+  ClipboardList,
+  Shield,
   LucideIcon
 } from 'lucide-react';
 
 export const ICON_MAP: Record<string, LucideIcon> = {
+  LayoutDashboard,
+  Database,
+  Palmtree,
+  ClipboardList,
+  Shield,
   CalendarCheck,
   FileSpreadsheet,
   BookOpen,
