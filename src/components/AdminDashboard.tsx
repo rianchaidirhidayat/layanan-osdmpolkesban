@@ -154,10 +154,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const hasUnpublishedChanges = React.useMemo(() => {
     if (!liveMenus || !liveProfile) return false;
     try {
-      return (
-        JSON.stringify(menus) !== JSON.stringify(liveMenus) ||
-        JSON.stringify(profile) !== JSON.stringify(liveProfile)
-      );
+      const normMenus = JSON.stringify(menus, (k, v) => (v === undefined ? null : v));
+      const normLiveMenus = JSON.stringify(liveMenus, (k, v) => (v === undefined ? null : v));
+      const normProfile = JSON.stringify(profile, (k, v) => (v === undefined ? null : v));
+      const normLiveProfile = JSON.stringify(liveProfile, (k, v) => (v === undefined ? null : v));
+
+      return normMenus !== normLiveMenus || normProfile !== normLiveProfile;
     } catch {
       return false;
     }
@@ -519,8 +521,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             {/* Actions & Auto-publish switch */}
             <div className="flex flex-wrap items-center gap-2.5 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-200/60">
+              {onPublish && (
+                <button
+                  type="button"
+                  onClick={onPublish}
+                  disabled={isPublishing}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-950/20 border border-emerald-400/40 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-75 cursor-pointer"
+                  title="Klik untuk langsung mempublikasikan seluruh perubahan ke portal resmi pegawai"
+                >
+                  {isPublishing ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Memposting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5 text-emerald-100" />
+                      <span>Posting / Update Portal Sekarang</span>
+                    </>
+                  )}
+                </button>
+              )}
+
               <label
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/80 border border-slate-200 text-xs text-slate-700 cursor-pointer hover:bg-white shadow-2xs transition-colors"
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/80 border border-slate-200 text-xs text-slate-700 cursor-pointer hover:bg-white shadow-2xs transition-colors"
                 title="Jika aktif, setiap perubahan yang Anda lakukan otomatis langsung tersimpan ke Cloud untuk pegawai"
               >
                 <input
@@ -535,7 +559,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 type="button"
                 onClick={handleCopyShareLink}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold border border-slate-300 shadow-xs transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold border border-slate-300 shadow-xs transition-colors cursor-pointer"
                 title="Salin tautan resmi yang dapat langsung dibagikan ke seluruh pegawai"
               >
                 <Share2 className="w-3.5 h-3.5 text-indigo-600" />

@@ -343,7 +343,7 @@ export default function App() {
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  // Sync draft states to LocalStorage
+  // Sync draft states to LocalStorage & Cloud Firestore
   // Keep menus and profile saved to LocalStorage for instant persistence
   useEffect(() => {
     try {
@@ -351,7 +351,13 @@ export default function App() {
     } catch {
       // ignore storage overflow
     }
-  }, [menus]);
+
+    const timer = setTimeout(() => {
+      saveAdminDraftToCloud(menus, profile).catch(console.warn);
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [menus, profile]);
 
   useEffect(() => {
     try {
