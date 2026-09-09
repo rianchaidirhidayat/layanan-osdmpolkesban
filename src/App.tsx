@@ -159,25 +159,6 @@ export default function App() {
     const unsubscribe = subscribeToLivePortal(
       (cloudData) => {
         if (cloudData && Array.isArray(cloudData.menus) && cloudData.profile) {
-          const hasNewDashboardMenu = cloudData.menus.some(
-            (m: MenuItem) => m.id === 'menu-dashboard-pegawai'
-          );
-
-          if (!hasNewDashboardMenu) {
-            // Cloud data is stale compared to latest AI Studio draft! Force publish latest INITIAL_MENUS & INITIAL_PROFILE to cloud
-            publishLivePortalToCloud(INITIAL_MENUS, INITIAL_PROFILE).catch(console.warn);
-            setLiveMenus(INITIAL_MENUS);
-            setLiveProfile(INITIAL_PROFILE);
-            setIsCloudSynced(true);
-            const hasLocalDraft = !!localStorage.getItem(LOCAL_STORAGE_MENUS_KEY);
-            if (!isInitialDraftLoadedFromCloudRef.current && !hasLocalDraft) {
-              setMenus(INITIAL_MENUS);
-              setProfile(INITIAL_PROFILE);
-              isInitialDraftLoadedFromCloudRef.current = true;
-            }
-            return;
-          }
-
           const syncedMenus = ensureHasWfaMenu(cloudData.menus);
           setLiveMenus(syncedMenus);
           setLiveProfile(cloudData.profile);

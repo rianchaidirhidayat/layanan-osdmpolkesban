@@ -186,9 +186,6 @@ export async function publishLivePortalToCloud(
   profile: MicrositeProfile
 ): Promise<{ success: boolean; timestamp: string; error?: string }> {
   const now = new Date().toISOString();
-  if (isQuotaExceeded) {
-    return { success: true, timestamp: now };
-  }
 
   try {
     const docRef = doc(db, 'portal', LIVE_PORTAL_DOC);
@@ -214,16 +211,17 @@ export async function publishLivePortalToCloud(
       })
     ]);
 
+    isQuotaExceeded = false;
     return { success: true, timestamp: now };
   } catch (err: any) {
-    if (handleQuotaError(err)) {
-      return { success: true, timestamp: now };
-    }
+    const isQuota = handleQuotaError(err);
     console.warn('Failed to write portal to Cloud Firestore:', err);
     return { 
       success: false,
       timestamp: now, 
-      error: err?.message || 'Gagal menyimpan ke server database cloud' 
+      error: isQuota
+        ? 'Batas Kuota Gratis Firestore Harian Tercapai (20.000 write/hari). Perubahan baru tetap aktif di browser ini & akan tersinkron otomatis setelah kuota harian di-reset Firebase.'
+        : (err?.message || 'Gagal menyimpan ke server database cloud')
     };
   }
 }
@@ -312,7 +310,6 @@ export async function saveAdminDraftToCloud(
   menus: MenuItem[],
   profile: MicrositeProfile
 ): Promise<boolean> {
-  if (isQuotaExceeded) return true;
   try {
     const docRef = doc(db, 'settings', DRAFT_DOC);
     const { menus: cleanMenus, profile: cleanProfile } = await optimizePortalPayload(menus, profile);
@@ -321,9 +318,10 @@ export async function saveAdminDraftToCloud(
       profile: cleanProfile,
       updatedAt: serverTimestamp(),
     });
+    isQuotaExceeded = false;
     return true;
   } catch (e: any) {
-    if (handleQuotaError(e)) return true;
+    handleQuotaError(e);
     console.warn('Failed to save draft to cloud:', e);
     return false;
   }
@@ -584,6 +582,37 @@ export async function deleteWfaSubmissionInCloud(
 const KEBUGARAN_COLLECTION = 'kebugaran_submissions';
 
 /**
+ * Seed initial Kebugaran dataset (76 items) to Cloud Firestore
+ */
+export async function seedKebugaranSubmissionsToCloud(
+  submissions: KebugaranSubmission[] = INITIAL_KEBUGARAN_SUBMISSIONS
+): Promise<{ success: boolean; count: number; error?: string }> {
+  if (isQuotaExceeded) return { success: true, count: 0 };
+  try {
+    const colRef = collection(db, KEBUGARAN_COLLECTION);
+    let count = 0;
+
+    // Use setDoc for deterministic doc IDs
+    const promises = submissions.map(async (item) => {
+      const docRef = doc(colRef, item.id);
+      const cleanData = sanitizeForFirestore(item);
+      await setDoc(docRef, {
+        ...cleanData,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      count++;
+    });
+
+    await Promise.all(promises);
+    return { success: true, count };
+  } catch (err: any) {
+    if (handleQuotaError(err)) return { success: true, count: 0 };
+    console.warn('Error seeding kebugaran submissions to Cloud Firestore:', err);
+    return { success: false, count: 0, error: err?.message || 'Failed to seed' };
+  }
+}
+
+/**
  * Real-time listener for Kebugaran Submissions
  */
 export function subscribeToKebugaranSubmissions(
@@ -596,6 +625,10 @@ export function subscribeToKebugaranSubmissions(
       colRef,
       (snapshot) => {
         if (snapshot.empty) {
+          // Auto-seed to Cloud Firestore when collection is empty
+          seedKebugaranSubmissionsToCloud(INITIAL_KEBUGARAN_SUBMISSIONS).catch((e) =>
+            console.warn('Auto-seed kebugaran failed:', e)
+          );
           onUpdate(INITIAL_KEBUGARAN_SUBMISSIONS);
           return;
         }
@@ -607,7 +640,7 @@ export function subscribeToKebugaranSubmissions(
             list.push({
               id: docSnap.id,
               tanggalPeriksa: d.tanggalPeriksa || '',
-              periode: d.periode || 'Triwulan I',
+              periode: d.periode || 'Triwulan III',
               nip: d.nip || '',
               namaPegawai: d.namaPegawai || '',
               tanggalLahir: d.tanggalLahir || '',
