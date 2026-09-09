@@ -662,6 +662,16 @@ export function subscribeToKebugaranSubmissions(
           }
         });
 
+        // Ensure any initial dataset items missing from Cloud Firestore are merged and seeded
+        const existingIds = new Set(list.map((item) => item.id));
+        const missingInitial = INITIAL_KEBUGARAN_SUBMISSIONS.filter((item) => !existingIds.has(item.id));
+        if (missingInitial.length > 0) {
+          seedKebugaranSubmissionsToCloud(missingInitial).catch((e) =>
+            console.warn('Auto-seed missing kebugaran items failed:', e)
+          );
+          list.push(...missingInitial);
+        }
+
         // In-memory sorting by createdAt descending
         list.sort((a, b) => {
           const timeA = new Date(a.createdAt || 0).getTime();

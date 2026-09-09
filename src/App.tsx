@@ -145,7 +145,17 @@ export default function App() {
   const [kebugaranSubmissions, setKebugaranSubmissions] = useState<KebugaranSubmission[]>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEBUGARAN_SUBMISSIONS_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingIds = new Set(parsed.map((item: KebugaranSubmission) => item.id));
+          const missing = INITIAL_KEBUGARAN_SUBMISSIONS.filter((item) => !existingIds.has(item.id));
+          if (missing.length > 0) {
+            return [...parsed, ...missing];
+          }
+          return parsed;
+        }
+      }
     } catch {
       // ignore
     }
