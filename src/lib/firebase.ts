@@ -211,33 +211,18 @@ export async function publishLivePortalToCloud(
       menus: cleanMenus,
       profile: cleanProfile,
       lastPublishedAt: now,
-      updatedAt: serverTimestamp(),
+      updatedAt: now,
     };
 
-    // 8-second safety timeout so network latency never blocks the UI indefinitely
-    const timeoutPromise = new Promise<{ timeout: true }>((resolve) => 
-      setTimeout(() => resolve({ timeout: true }), 8000)
-    );
+    // Direct write to Cloud Firestore so all subscribed devices update in real-time
+    await setDoc(docRef, payload);
 
-    const writePromise = Promise.all([
-      setDoc(docRef, payload),
-      setDoc(draftRef, {
-        menus: cleanMenus,
-        profile: cleanProfile,
-        updatedAt: serverTimestamp(),
-      })
-    ]).then(() => ({ timeout: false as const }));
-
-    const result = await Promise.race([writePromise, timeoutPromise]);
-
-    if ('timeout' in result && result.timeout) {
-      console.warn('Cloud Firestore publish write timed out, saved locally and background syncing.');
-      return { 
-        success: false, 
-        timestamp: now, 
-        error: 'Penerbitan Cloud mengalami batas waktu (timeout). Perubahan tersimpan di browser ini.' 
-      };
-    }
+    // Also update draft document asynchronously in background
+    setDoc(draftRef, {
+      menus: cleanMenus,
+      profile: cleanProfile,
+      updatedAt: now,
+    }).catch((e) => console.warn('Draft sync warning:', e));
 
     isQuotaExceeded = false;
     return { success: true, timestamp: now };
@@ -248,7 +233,7 @@ export async function publishLivePortalToCloud(
       success: false,
       timestamp: now, 
       error: isQuota
-        ? 'Batas Kuota Gratis Firestore Harian Tercapai (20.000 write/hari). Perubahan baru tetap aktif di browser ini & akan tersinkron otomatis setelah kuota harian di-reset Firebase.'
+        ? 'Batas Kuota Gratis Firestore Harian Tercapai (20.000 write/hari).'
         : (err?.message || 'Gagal menyimpan ke server database cloud')
     };
   }
@@ -291,7 +276,7 @@ export async function saveAdminPinToCloud(newPin: string): Promise<boolean> {
     const docRef = doc(db, 'settings', SECURITY_DOC);
     await setDoc(docRef, {
       pin: newPin.trim(),
-      updatedAt: serverTimestamp(),
+      updatedAt: new Date().toISOString(),
     });
     return true;
   } catch (err: any) {
