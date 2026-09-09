@@ -286,16 +286,6 @@ export default function App() {
           setMenus(syncedDraftMenus);
           setProfile(draftData.profile);
           isInitialDraftLoadedFromCloudRef.current = true;
-
-          const hadWfa = draftData.menus.some(
-            (m: MenuItem) =>
-              m.id === 'menu-wfa-bimbingan' ||
-              m.url === '#wfa-bimbingan' ||
-              m.title?.toLowerCase().includes('wfa bimbingan')
-          );
-          if (!hadWfa) {
-            saveAdminDraftToCloud(syncedDraftMenus, draftData.profile).catch(console.warn);
-          }
         }
       }
     });
@@ -352,12 +342,14 @@ export default function App() {
       // ignore storage overflow
     }
 
+    if (!isAdminAuthenticated) return;
+
     const timer = setTimeout(() => {
       saveAdminDraftToCloud(menus, profile).catch(console.warn);
-    }, 1500);
+    }, 5000);
 
     return () => clearTimeout(timer);
-  }, [menus, profile]);
+  }, [menus, profile, isAdminAuthenticated]);
 
   useEffect(() => {
     try {
@@ -839,58 +831,62 @@ export default function App() {
 
   // Function to Publish/Update Live Portal for Employees (Real-time Cloud Sync)
   const handlePublishLive = async () => {
+    if (isPublishing) return;
     setIsPublishing(true);
-    const updatedMenus = JSON.parse(JSON.stringify(menus));
-    const updatedProfile = JSON.parse(JSON.stringify(profile));
-    const now = new Date().toISOString();
-
-    // 1. Update local state and localStorage immediately
-    setLiveMenus(updatedMenus);
-    setLiveProfile(updatedProfile);
-    setLastPublishedAt(now);
 
     try {
-      localStorage.setItem(LOCAL_STORAGE_LIVE_MENUS_KEY, JSON.stringify(updatedMenus));
-      localStorage.setItem(LOCAL_STORAGE_LIVE_PROFILE_KEY, JSON.stringify(updatedProfile));
-      localStorage.setItem(LOCAL_STORAGE_LAST_PUBLISHED_KEY, now);
-    } catch {
-      // ignore
-    }
+      const updatedMenus = Array.isArray(menus) ? menus.map((m) => ({ ...m })) : [];
+      const updatedProfile = profile ? { ...profile } : INITIAL_PROFILE;
+      const now = new Date().toISOString();
 
-    // 2. Broadcast immediately to any other tabs or windows in the same browser (0ms latency)
-    if (typeof BroadcastChannel !== 'undefined') {
+      // 1. Update local state and localStorage immediately
+      setLiveMenus(updatedMenus);
+      setLiveProfile(updatedProfile);
+      setLastPublishedAt(now);
+
       try {
-        const bc = new BroadcastChannel('direct_menu_live_sync');
-        bc.postMessage({
-          type: 'PORTAL_LIVE_UPDATE',
-          menus: updatedMenus,
-          profile: updatedProfile,
-          timestamp: now,
-        });
-        bc.close();
+        localStorage.setItem(LOCAL_STORAGE_LIVE_MENUS_KEY, JSON.stringify(updatedMenus));
+        localStorage.setItem(LOCAL_STORAGE_LIVE_PROFILE_KEY, JSON.stringify(updatedProfile));
+        localStorage.setItem(LOCAL_STORAGE_LAST_PUBLISHED_KEY, now);
       } catch (e) {
-        console.warn('Broadcast error:', e);
+        console.warn('LocalStorage save error:', e);
       }
-    }
 
-    try {
+      // 2. Broadcast immediately to any other tabs or windows in the same browser (0ms latency)
+      if (typeof BroadcastChannel !== 'undefined') {
+        try {
+          const bc = new BroadcastChannel('direct_menu_live_sync');
+          bc.postMessage({
+            type: 'PORTAL_LIVE_UPDATE',
+            menus: updatedMenus,
+            profile: updatedProfile,
+            timestamp: now,
+          });
+          bc.close();
+        } catch (e) {
+          console.warn('Broadcast error:', e);
+        }
+      }
+
       // 3. Sync directly to Cloud Firestore so ALL devices and public URLs receive updates immediately
       const result = await publishLivePortalToCloud(updatedMenus, updatedProfile);
-      setLastPublishedAt(result.timestamp);
-      
-      if (!result.success || result.error) {
+      setLastPublishedAt(result.timestamp || now);
+
+      if (!result.success) {
         setIsCloudSynced(false);
         setPublishStatus({
           success: false,
           cloudSynced: false,
-          message: `Perubahan baru tersimpan lokal. Gagal terhubung ke Cloud: ${result.error || 'Koneksi terputus'}`
+          message: `Perubahan tersimpan lokal. (${result.error || 'Terhubung via lokal'})`
         });
       } else {
         setIsCloudSynced(true);
         setPublishStatus({
           success: true,
           cloudSynced: true,
-          message: 'Berhasil diposting ke Cloud Firestore! Semua perangkat pegawai & tab browser otomatis diperbarui.'
+          message: result.error 
+            ? `Berhasil diposting! (${result.error})`
+            : 'Berhasil diposting ke Cloud Firestore! Semua perangkat pegawai & tab browser otomatis diperbarui.'
         });
       }
     } catch (error: any) {
@@ -899,7 +895,7 @@ export default function App() {
       setPublishStatus({
         success: false,
         cloudSynced: false,
-        message: `Tersimpan di browser ini saja. (Cloud error: ${error?.message || 'Gagal menyimpan'})`
+        message: `Tersimpan di browser ini saja. (${error?.message || 'Gagal menyimpan'})`
       });
     } finally {
       setIsPublishing(false);

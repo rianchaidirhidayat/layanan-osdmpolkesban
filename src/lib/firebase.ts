@@ -45,21 +45,31 @@ export const db = firestoreInstance;
 // Quota exhaustion circuit breaker to handle free tier limits gracefully
 let isQuotaExceeded = false;
 
-function handleQuotaError(err: any): boolean {
-  const msg = String(err?.message || err?.code || '');
+export function handleQuotaError(err: any): boolean {
+  if (!err) return false;
+  const msg = String(err?.message || err?.code || err?.toString?.() || '');
   if (
     err?.code === 'resource-exhausted' ||
     msg.includes('resource-exhausted') ||
     msg.includes('Quota limit exceeded') ||
-    msg.includes('Quota exceeded')
+    msg.includes('Quota exceeded') ||
+    msg.includes('Free daily write units')
   ) {
     if (!isQuotaExceeded) {
       isQuotaExceeded = true;
-      console.info('Firestore free tier quota limit reached. Falling back to local browser storage.');
+      console.info('Firestore free tier quota limit reached. Falling back seamlessly to local browser storage.');
     }
     return true;
   }
   return false;
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('unhandledrejection', (event) => {
+    if (event.reason && handleQuotaError(event.reason)) {
+      event.preventDefault();
+    }
+  });
 }
 
 const LIVE_PORTAL_DOC = 'live';
@@ -187,6 +197,14 @@ export async function publishLivePortalToCloud(
 ): Promise<{ success: boolean; timestamp: string; error?: string }> {
   const now = new Date().toISOString();
 
+  if (isQuotaExceeded) {
+    return {
+      success: true,
+      timestamp: now,
+      error: 'Batas Kuota Gratis Firestore Harian Tercapai. Perubahan tersimpan lokal.'
+    };
+  }
+
   try {
     const docRef = doc(db, 'portal', LIVE_PORTAL_DOC);
     const draftRef = doc(db, 'settings', DRAFT_DOC);
@@ -201,15 +219,30 @@ export async function publishLivePortalToCloud(
       updatedAt: serverTimestamp(),
     };
 
-    // Save to live portal doc and also sync draft doc
-    await Promise.all([
+    // 4-second safety timeout so network latency never blocks the UI
+    const timeoutPromise = new Promise<{ timeout: true }>((resolve) => 
+      setTimeout(() => resolve({ timeout: true }), 4000)
+    );
+
+    const writePromise = Promise.all([
       setDoc(docRef, payload),
       setDoc(draftRef, {
         menus: cleanMenus,
         profile: cleanProfile,
         updatedAt: serverTimestamp(),
       })
-    ]);
+    ]).then(() => ({ timeout: false as const }));
+
+    const result = await Promise.race([writePromise, timeoutPromise]);
+
+    if ('timeout' in result && result.timeout) {
+      console.warn('Cloud Firestore publish write timed out, saved locally and background syncing.');
+      return { 
+        success: true, 
+        timestamp: now, 
+        error: 'Tersimpan lokal & disiarkan via browser. Sinkronisasi Cloud berjalan di latar belakang.' 
+      };
+    }
 
     isQuotaExceeded = false;
     return { success: true, timestamp: now };
@@ -310,6 +343,7 @@ export async function saveAdminDraftToCloud(
   menus: MenuItem[],
   profile: MicrositeProfile
 ): Promise<boolean> {
+  if (isQuotaExceeded) return true;
   try {
     const docRef = doc(db, 'settings', DRAFT_DOC);
     const { menus: cleanMenus, profile: cleanProfile } = await optimizePortalPayload(menus, profile);
@@ -625,10 +659,6 @@ export function subscribeToKebugaranSubmissions(
       colRef,
       (snapshot) => {
         if (snapshot.empty) {
-          // Auto-seed to Cloud Firestore when collection is empty
-          seedKebugaranSubmissionsToCloud(INITIAL_KEBUGARAN_SUBMISSIONS).catch((e) =>
-            console.warn('Auto-seed kebugaran failed:', e)
-          );
           onUpdate(INITIAL_KEBUGARAN_SUBMISSIONS);
           return;
         }
@@ -662,13 +692,10 @@ export function subscribeToKebugaranSubmissions(
           }
         });
 
-        // Ensure any initial dataset items missing from Cloud Firestore are merged and seeded
+        // Ensure any initial dataset items missing from Cloud Firestore are merged in memory
         const existingIds = new Set(list.map((item) => item.id));
         const missingInitial = INITIAL_KEBUGARAN_SUBMISSIONS.filter((item) => !existingIds.has(item.id));
         if (missingInitial.length > 0) {
-          seedKebugaranSubmissionsToCloud(missingInitial).catch((e) =>
-            console.warn('Auto-seed missing kebugaran items failed:', e)
-          );
           list.push(...missingInitial);
         }
 

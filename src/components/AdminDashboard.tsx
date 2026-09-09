@@ -524,7 +524,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {onPublish && (
                 <button
                   type="button"
-                  onClick={onPublish}
+                  onClick={() => onPublish()}
                   disabled={isPublishing}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-950/20 border border-emerald-400/40 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-75 cursor-pointer"
                   title="Klik untuk langsung mempublikasikan seluruh perubahan ke portal resmi pegawai"
