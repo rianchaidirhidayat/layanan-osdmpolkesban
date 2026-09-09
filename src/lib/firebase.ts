@@ -199,9 +199,9 @@ export async function publishLivePortalToCloud(
 
   if (isQuotaExceeded) {
     return {
-      success: true,
+      success: false,
       timestamp: now,
-      error: 'Batas Kuota Gratis Firestore Harian Tercapai. Perubahan tersimpan lokal.'
+      error: 'Batas Kuota Harian Firebase Cloud Terlampaui (20.000 write/hari). Perubahan baru tersimpan lokal di browser ini. Perangkat teman/pegawai lain belum menerima pembaruan sampai kuota di-reset Firebase.'
     };
   }
 
@@ -291,7 +291,7 @@ export function subscribeToAdminSecurity(
  * Save new Admin PIN to Cloud Firestore
  */
 export async function saveAdminPinToCloud(newPin: string): Promise<boolean> {
-  if (isQuotaExceeded) return true;
+  if (isQuotaExceeded) return false;
   try {
     const docRef = doc(db, 'settings', SECURITY_DOC);
     await setDoc(docRef, {
@@ -300,7 +300,7 @@ export async function saveAdminPinToCloud(newPin: string): Promise<boolean> {
     });
     return true;
   } catch (err: any) {
-    if (handleQuotaError(err)) return true;
+    if (handleQuotaError(err)) return false;
     console.warn('Failed to save Admin PIN to Cloud Firestore:', err);
     return false;
   }

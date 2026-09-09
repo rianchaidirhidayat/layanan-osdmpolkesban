@@ -29,6 +29,7 @@ import { WfaSubmission, KebugaranSubmission } from '../types';
 interface PublicMicrositeProps {
   profile: MicrositeProfile;
   menus: MenuItem[];
+  adminPin?: string;
   onMenuClick: (menu: MenuItem) => void;
   onOpenQR: () => void;
   onOpenAdmin?: () => void;
@@ -43,6 +44,7 @@ interface PublicMicrositeProps {
 export const PublicMicrosite: React.FC<PublicMicrositeProps> = ({
   profile,
   menus,
+  adminPin,
   onMenuClick,
   onOpenQR,
   onOpenAdmin,
@@ -617,6 +619,7 @@ export const PublicMicrosite: React.FC<PublicMicrositeProps> = ({
         isOpen={!!pinModalMenu}
         menu={pinModalMenu}
         logoUrl={profile.avatarUrl}
+        adminPin={adminPin}
         onClose={() => setPinModalMenu(null)}
         onSuccess={handlePinSuccess}
       />

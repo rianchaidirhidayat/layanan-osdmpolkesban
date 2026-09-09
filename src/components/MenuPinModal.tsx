@@ -7,6 +7,7 @@ interface MenuPinModalProps {
   isOpen: boolean;
   menu: MenuItem | null;
   logoUrl?: string;
+  adminPin?: string;
   onClose: () => void;
   onSuccess: (menu: MenuItem) => void;
 }
@@ -18,6 +19,7 @@ export const MenuPinModal: React.FC<MenuPinModalProps> = ({
   isOpen,
   menu,
   logoUrl,
+  adminPin,
   onClose,
   onSuccess,
 }) => {
@@ -49,7 +51,8 @@ export const MenuPinModal: React.FC<MenuPinModalProps> = ({
   const handleVerify = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
-    const expectedPin = (menu.pinCode || '').trim();
+    const itemPin = (menu.pinCode || '').trim();
+    const globalPin = (adminPin || '').trim();
     const enteredPin = pinInput.trim();
 
     if (!enteredPin) {
@@ -58,7 +61,13 @@ export const MenuPinModal: React.FC<MenuPinModalProps> = ({
       return;
     }
 
-    if (enteredPin === expectedPin) {
+    // Accepts item-specific PIN, global Admin PIN, or default '1234'
+    const isMatched =
+      (itemPin && enteredPin === itemPin) ||
+      (globalPin && enteredPin === globalPin) ||
+      (!itemPin && enteredPin === '1234');
+
+    if (isMatched) {
       setIsSuccess(true);
       setErrorMessage(null);
       setTimeout(() => {
@@ -66,7 +75,7 @@ export const MenuPinModal: React.FC<MenuPinModalProps> = ({
         onClose();
       }, 400);
     } else {
-      setErrorMessage('Kode PIN salah! Pastikan Anda memiliki akses atau hubungi pengelola.');
+      setErrorMessage('Kode PIN salah! Pastikan Anda memasukkan PIN yang sesuai atau hubungi pengelola.');
       inputRef.current?.focus();
       inputRef.current?.select();
     }

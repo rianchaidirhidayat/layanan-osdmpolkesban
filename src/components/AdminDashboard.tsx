@@ -51,11 +51,13 @@ import {
   RefreshCw,
   Activity,
   Users,
+  FileCode,
 } from 'lucide-react';
 import { MenuItem, MicrositeProfile, ClickLog, ButtonSize, ThemeConfig, WfaSubmission, WfaValidationStatus, KebugaranSubmission } from '../types';
 import { THEME_PRESETS, CATEGORIES_PRESET } from '../data/initialData';
 import { getIconComponent } from '../utils/iconMap';
 import { AdminMenuEditorModal } from './AdminMenuEditorModal';
+import { AdminExportImportModal } from './AdminExportImportModal';
 import { AnalyticsView } from './AnalyticsView';
 import { WfaMonitoringView } from './WfaMonitoringView';
 import { KebugaranMonitoringView } from './KebugaranMonitoringView';
@@ -186,6 +188,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } catch (e) {
       console.warn('Copy link error:', e);
     }
+  };
+
+  // Export / Import modal state
+  const [isExportImportOpen, setIsExportImportOpen] = useState(false);
+
+  const handleImportConfig = (imported: { menus: MenuItem[]; profile: MicrositeProfile; pin?: string }) => {
+    if (imported.menus && Array.isArray(imported.menus)) {
+      setMenus(imported.menus);
+    }
+    if (imported.profile) {
+      setProfile(imported.profile);
+    }
+    if (imported.pin && setAdminPin) {
+      setAdminPin(imported.pin);
+    }
+    triggerSaveFeedback();
   };
 
   // Security tab local state
@@ -457,6 +475,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           >
             <Eye className="w-3.5 h-3.5 text-indigo-600" />
             <span>Buka Microsite Utama</span>
+          </button>
+
+          <button
+            onClick={() => setIsExportImportOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium border border-slate-200 transition-colors shadow-xs"
+            title="Ekspor atau Impor konfigurasi portal & PIN (JSON Backup)"
+          >
+            <FileCode className="w-3.5 h-3.5 text-slate-600" />
+            <span>Backup / Impor JSON</span>
           </button>
 
           <button
@@ -2445,8 +2472,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         return;
                       }
 
+                      const cleanPin = newPinInput.trim();
                       if (setAdminPin) {
-                        setAdminPin(newPinInput.trim());
+                        setAdminPin(cleanPin);
+                      }
+                      if (setMenus && Array.isArray(menus)) {
+                        const updated = menus.map((m) => {
+                          if (m.isProtected) {
+                            return { ...m, pinCode: cleanPin };
+                          }
+                          return m;
+                        });
+                        setMenus(updated);
                       }
                       setNewPinInput('');
                       setConfirmPinInput('');
@@ -2596,6 +2633,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         initialMenu={editingMenu}
         currentTheme={profile.theme}
         availableCategories={availableCategories}
+      />
+
+      {/* Backup & Import JSON Modal */}
+      <AdminExportImportModal
+        isOpen={isExportImportOpen}
+        onClose={() => setIsExportImportOpen(false)}
+        menus={menus}
+        profile={profile}
+        adminPin={adminPin}
+        onImport={handleImportConfig}
       />
     </div>
   );

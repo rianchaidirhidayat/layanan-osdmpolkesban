@@ -1029,6 +1029,7 @@ export default function App() {
             <PublicMicrosite
               profile={liveProfile}
               menus={liveMenus}
+              adminPin={adminPin}
               onMenuClick={handleMenuClick}
               onOpenQR={() => setIsQRModalOpen(true)}
               onOpenAdmin={() => {
@@ -1126,6 +1127,7 @@ export default function App() {
                 <PublicMicrosite
                   profile={profile}
                   menus={menus}
+                  adminPin={adminPin}
                   onMenuClick={handleMenuClick}
                   onOpenQR={() => setIsQRModalOpen(true)}
                   isStandalone={false}
