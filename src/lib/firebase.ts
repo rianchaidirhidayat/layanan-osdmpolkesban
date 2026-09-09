@@ -197,13 +197,8 @@ export async function publishLivePortalToCloud(
 ): Promise<{ success: boolean; timestamp: string; error?: string }> {
   const now = new Date().toISOString();
 
-  if (isQuotaExceeded) {
-    return {
-      success: false,
-      timestamp: now,
-      error: 'Batas Kuota Harian Firebase Cloud Terlampaui (20.000 write/hari). Perubahan baru tersimpan lokal di browser ini. Perangkat teman/pegawai lain belum menerima pembaruan sampai kuota di-reset Firebase.'
-    };
-  }
+  // Reset circuit breaker so explicit user publish always attempts real-time Cloud Firestore sync
+  isQuotaExceeded = false;
 
   try {
     const docRef = doc(db, 'portal', LIVE_PORTAL_DOC);
@@ -219,9 +214,9 @@ export async function publishLivePortalToCloud(
       updatedAt: serverTimestamp(),
     };
 
-    // 4-second safety timeout so network latency never blocks the UI
+    // 8-second safety timeout so network latency never blocks the UI indefinitely
     const timeoutPromise = new Promise<{ timeout: true }>((resolve) => 
-      setTimeout(() => resolve({ timeout: true }), 4000)
+      setTimeout(() => resolve({ timeout: true }), 8000)
     );
 
     const writePromise = Promise.all([
@@ -238,9 +233,9 @@ export async function publishLivePortalToCloud(
     if ('timeout' in result && result.timeout) {
       console.warn('Cloud Firestore publish write timed out, saved locally and background syncing.');
       return { 
-        success: true, 
+        success: false, 
         timestamp: now, 
-        error: 'Tersimpan lokal & disiarkan via browser. Sinkronisasi Cloud berjalan di latar belakang.' 
+        error: 'Penerbitan Cloud mengalami batas waktu (timeout). Perubahan tersimpan di browser ini.' 
       };
     }
 
@@ -291,7 +286,7 @@ export function subscribeToAdminSecurity(
  * Save new Admin PIN to Cloud Firestore
  */
 export async function saveAdminPinToCloud(newPin: string): Promise<boolean> {
-  if (isQuotaExceeded) return false;
+  isQuotaExceeded = false;
   try {
     const docRef = doc(db, 'settings', SECURITY_DOC);
     await setDoc(docRef, {
