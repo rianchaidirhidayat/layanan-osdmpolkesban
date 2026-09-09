@@ -214,15 +214,35 @@ export async function publishLivePortalToCloud(
       updatedAt: now,
     };
 
-    // Direct write to Cloud Firestore so all subscribed devices update in real-time
-    await setDoc(docRef, payload);
+    // 3.5-second safety race so the UI button NEVER gets stuck spinning round-and-round
+    const timeoutPromise = new Promise<{ timeout: true }>((resolve) => 
+      setTimeout(() => resolve({ timeout: true }), 3500)
+    );
 
-    // Also update draft document asynchronously in background
-    setDoc(draftRef, {
-      menus: cleanMenus,
-      profile: cleanProfile,
-      updatedAt: now,
-    }).catch((e) => console.warn('Draft sync warning:', e));
+    const writePromise = setDoc(docRef, payload)
+      .then(() => {
+        // Also update draft document asynchronously in background
+        setDoc(draftRef, {
+          menus: cleanMenus,
+          profile: cleanProfile,
+          updatedAt: now,
+        }).catch((e) => console.warn('Draft sync warning:', e));
+        return { timeout: false as const };
+      })
+      .catch((err) => {
+        throw err;
+      });
+
+    const result = await Promise.race([writePromise, timeoutPromise]);
+
+    if ('timeout' in result && result.timeout) {
+      console.info('Cloud Firestore write initiated and continuing in background queue.');
+      return { 
+        success: true, 
+        timestamp: now, 
+        error: 'Penerbitan terdaftar & dikirim ke Cloud di latar belakang (Background Sync).' 
+      };
+    }
 
     isQuotaExceeded = false;
     return { success: true, timestamp: now };
