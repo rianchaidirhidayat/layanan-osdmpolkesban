@@ -191,13 +191,15 @@ export default function App() {
       },
       async () => {
         // Cloud document doesn't exist yet on Firestore!
-        // Automatically seed with current menus and profile so any employee opening the link sees it immediately.
-        try {
-          console.log('Seeding initial portal live data to Cloud Firestore...');
-          await publishLivePortalToCloud(menus, profile);
-          setIsCloudSynced(true);
-        } catch (e) {
-          console.warn('Firestore auto-seed error:', e);
+        // Only seed if logged in as Admin to prevent public viewers from consuming write quota.
+        if (sessionStorage.getItem(SESSION_ADMIN_AUTH_KEY) === 'true') {
+          try {
+            console.log('Seeding initial portal live data to Cloud Firestore...');
+            await publishLivePortalToCloud(menus, profile);
+            setIsCloudSynced(true);
+          } catch (e) {
+            console.warn('Firestore auto-seed error:', e);
+          }
         }
       }
     );
@@ -341,15 +343,7 @@ export default function App() {
     } catch {
       // ignore storage overflow
     }
-
-    if (!isAdminAuthenticated) return;
-
-    const timer = setTimeout(() => {
-      saveAdminDraftToCloud(menus, profile).catch(console.warn);
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [menus, profile, isAdminAuthenticated]);
+  }, [menus]);
 
   useEffect(() => {
     try {
@@ -1207,6 +1201,11 @@ export default function App() {
                       {publishStatus?.cloudSynced ? '🟢 Sinkron (Semua Device)' : '🟡 Tersimpan Lokal'}
                     </span>
                   </div>
+                  {!publishStatus?.cloudSynced && (
+                    <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 font-sans leading-relaxed">
+                      💡 <strong>Pemberitahuan Kuota Cloud:</strong> Kuota gratis Firebase Firestore harian sedang penuh. Perubahan tersimpan lokal di browser ini. Untuk memperbarui device lain secara langsung tanpa menunggu reset harian, gunakan fitur <strong>Backup / Impor JSON</strong> di Dashboard.
+                    </div>
+                  )}
                   <div className="flex justify-between text-slate-600">
                     <span>Waktu Publikasi:</span>
                     <span className="font-bold text-emerald-600">

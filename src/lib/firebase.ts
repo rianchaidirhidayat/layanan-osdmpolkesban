@@ -342,21 +342,11 @@ export async function saveAdminDraftToCloud(
 }
 
 /**
- * Log analytics click event to Cloud Firestore
+ * Log analytics click event locally (Cloud write disabled to preserve 20,000 daily write quota for live portal sync)
  */
 export async function logClickToCloud(log: ClickLog): Promise<void> {
-  if (isQuotaExceeded) return;
-  try {
-    const logsCol = collection(db, 'click_logs');
-    const cleanLog = sanitizeForFirestore(log);
-    await addDoc(logsCol, {
-      ...cleanLog,
-      serverTime: serverTimestamp()
-    });
-  } catch (e: any) {
-    handleQuotaError(e);
-    console.warn('Failed to log click to cloud:', e);
-  }
+  // Keeping click logs in local storage to preserve 100% of the 20,000 Firestore write quota for real-time menu & PIN publishing
+  return;
 }
 
 /**
